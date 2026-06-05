@@ -61,6 +61,11 @@ export function createPlacementDialogElement({
   root.className = "placement-dialog";
   root.style.width = `${DIALOG_WIDTH}px`;
   root.style.height = `${DIALOG_HEIGHT}px`;
+  const stopMapClick = (event: Event) => {
+    event.stopPropagation();
+  };
+  root.addEventListener("mousedown", stopMapClick);
+  root.addEventListener("click", stopMapClick);
 
   const arc = document.createElement("div");
   arc.className = "placement-dialog__arc";

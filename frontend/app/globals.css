@@ -52,6 +52,7 @@
   padding: 0;
   background: transparent;
   box-shadow: none;
+  pointer-events: auto;
 }
 
 .placement-popup .maplibregl-popup-tip {

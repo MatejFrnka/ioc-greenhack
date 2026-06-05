@@ -167,8 +167,9 @@ export default function Map({
   const placementPopupRef = useRef<maplibregl.Popup | null>(null);
   const schedulePopupRef = useRef<maplibregl.Popup | null>(null);
   const openSchedulePopupRef = useRef<
-    (point: MapPoint, options?: { isNew?: boolean }) => void
+    (pointOrId: MapPoint | string, options?: { isNew?: boolean }) => void
   >(() => {});
+  const pointsRef = useRef<MapPoint[]>([]);
   const openPlacementPopupRef = useRef<(lng: number, lat: number) => void>(
     () => {}
   );
@@ -206,6 +207,7 @@ export default function Map({
     useState<number>(DEFAULT_BATTERY_KWH);
 
   const chargingStations = plan?.charging_stations ?? [];
+  pointsRef.current = points;
 
   // Hovering a charging session in the list highlights its marker; it lingers
   // briefly after the pointer leaves so the pulse is noticeable.
@@ -379,10 +381,24 @@ export default function Map({
       schedulePopupRef.current = null;
     };
 
+    const resolvePoint = (pointOrId: MapPoint | string): MapPoint | undefined => {
+      if (typeof pointOrId === "string") {
+        return pointsRef.current.find((candidate) => candidate.id === pointOrId);
+      }
+      return (
+        pointsRef.current.find((candidate) => candidate.id === pointOrId.id) ??
+        pointOrId
+      );
+    };
+
     const openSchedulePopup = (
-      point: MapPoint,
+      pointOrId: MapPoint | string,
       options?: { isNew?: boolean }
     ) => {
+      const point = resolvePoint(pointOrId);
+      if (!point) return;
+
+      const pointId = point.id;
       closePlacementPopup();
       closeSchedulePopup();
 
@@ -399,17 +415,17 @@ export default function Map({
         initialVisits: point.visits,
         initialHours: point.timeSpentMinutes / 60,
         onConfirm: (visits, hours) => {
-          updatePointRef.current(point.id, visits, Math.round(hours * 60));
+          updatePointRef.current(pointId, visits, Math.round(hours * 60));
           closeSchedulePopup();
         },
         onCancel: () => {
           if (options?.isNew) {
-            removePointRef.current(point.id);
+            removePointRef.current(pointId);
           }
           closeSchedulePopup();
         },
         onDelete: () => {
-          removePointRef.current(point.id);
+          removePointRef.current(pointId);
           closeSchedulePopup();
         },
       });
@@ -448,6 +464,16 @@ export default function Map({
     openPlacementPopupRef.current = openPlacementPopup;
 
     map.on("click", (event) => {
+      const target = event.originalEvent.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          ".schedule-dialog, .placement-dialog, .maplibregl-popup"
+        )
+      ) {
+        return;
+      }
+
       closeSchedulePopup();
       if (sidebarViewRef.current === "analysis") return;
 
@@ -582,11 +608,12 @@ export default function Map({
         continue;
       }
 
+      const pointId = point.id;
       const marker = new maplibregl.Marker({
         element: createMarkerElement(point.type, (event) => {
           event.stopPropagation();
           if (sidebarViewRef.current === "analysis") return;
-          openSchedulePopupRef.current(point);
+          openSchedulePopupRef.current(pointId);
         }),
         anchor: "center",
       })

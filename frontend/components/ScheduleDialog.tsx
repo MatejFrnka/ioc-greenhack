@@ -42,6 +42,11 @@ export function createScheduleDialogElement({
 
   const root = document.createElement("div");
   root.className = "schedule-dialog";
+  const stopMapClick = (event: Event) => {
+    event.stopPropagation();
+  };
+  root.addEventListener("mousedown", stopMapClick);
+  root.addEventListener("click", stopMapClick);
 
   const daysSection = document.createElement("div");
   daysSection.className = "schedule-dialog__section";
