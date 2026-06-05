@@ -1,12 +1,12 @@
 import {
-	PLACEMENT_POINT_TYPES,
-	POINT_TYPE_CONFIG,
-	type PointType,
+  PLACEMENT_POINT_TYPES,
+  POINT_TYPE_CONFIG,
+  type PointType,
 } from "@/lib/map-points";
 
 interface PlacementDialogHandlers {
-	onSelect: (type: PointType) => void;
-	onCancel: () => void;
+  onSelect: (type: PointType) => void;
+  onCancel: () => void;
 }
 
 const ICON_SIZE = 48;
@@ -28,70 +28,70 @@ const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF + EDGE_PAD);
 const CENTER_X = DIALOG_WIDTH / 2;
 const CENTER_Y = ARC_RADIUS + ICON_HALF + EDGE_PAD + CENTER_DOWN_OFFSET;
 const DIALOG_HEIGHT =
-	CENTER_Y + CENTER_BTN_OFFSET + CENTER_BTN_HALF + PIN_GAP + PIN_HEIGHT;
+  CENTER_Y + CENTER_BTN_OFFSET + CENTER_BTN_HALF + PIN_GAP + PIN_HEIGHT;
 
 function createMaterialIcon(name: string): HTMLSpanElement {
-	const icon = document.createElement("span");
-	icon.className = "material-icons placement-dialog__icon-glyph";
-	icon.textContent = name;
-	return icon;
+  const icon = document.createElement("span");
+  icon.className = "material-icons placement-dialog__icon-glyph";
+  icon.textContent = name;
+  return icon;
 }
 
 function createIconButton(
-	type: PointType,
-	x: number,
-	y: number,
-	onSelect: (type: PointType) => void,
+  type: PointType,
+  x: number,
+  y: number,
+  onSelect: (type: PointType) => void
 ): HTMLButtonElement {
-	const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
-	const button = document.createElement("button");
-	button.type = "button";
-	button.className = "placement-dialog__icon-btn";
-	button.title = label;
-	button.style.left = `${x}px`;
-	button.style.top = `${y}px`;
-	button.style.backgroundColor = color;
-	button.style.color = foreground;
-	button.append(createMaterialIcon(icon));
-	button.addEventListener("click", () => onSelect(type));
-	return button;
+  const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "placement-dialog__icon-btn";
+  button.title = label;
+  button.style.left = `${x}px`;
+  button.style.top = `${y}px`;
+  button.style.backgroundColor = color;
+  button.style.color = foreground;
+  button.append(createMaterialIcon(icon));
+  button.addEventListener("click", () => onSelect(type));
+  return button;
 }
 
 export function createPlacementDialogElement({
-	onSelect,
-	onCancel,
+  onSelect,
+  onCancel,
 }: PlacementDialogHandlers): HTMLElement {
-	const root = document.createElement("div");
-	root.className = "placement-dialog";
-	root.style.width = `${DIALOG_WIDTH}px`;
-	root.style.height = `${DIALOG_HEIGHT}px`;
+  const root = document.createElement("div");
+  root.className = "placement-dialog";
+  root.style.width = `${DIALOG_WIDTH}px`;
+  root.style.height = `${DIALOG_HEIGHT}px`;
 
-	const arc = document.createElement("div");
-	arc.className = "placement-dialog__arc";
+  const arc = document.createElement("div");
+  arc.className = "placement-dialog__arc";
 
-	const count = PLACEMENT_POINT_TYPES.length;
-	for (let i = 0; i < count; i++) {
-		const type = PLACEMENT_POINT_TYPES[i];
-		const angle = ARC_START - (i * ARC_SPAN) / (count - 1);
-		const x = CENTER_X + ARC_RADIUS * Math.cos(angle);
-		const y = CENTER_Y - ARC_RADIUS * Math.sin(angle);
-		arc.append(createIconButton(type, x, y, onSelect));
-	}
+  const count = PLACEMENT_POINT_TYPES.length;
+  for (let i = 0; i < count; i++) {
+    const type = PLACEMENT_POINT_TYPES[i];
+    const angle = ARC_START - (i * ARC_SPAN) / (count - 1);
+    const x = CENTER_X + ARC_RADIUS * Math.cos(angle);
+    const y = CENTER_Y - ARC_RADIUS * Math.sin(angle);
+    arc.append(createIconButton(type, x, y, onSelect));
+  }
 
-	const centerButton = document.createElement("button");
-	centerButton.type = "button";
-	centerButton.className = "placement-dialog__center-btn";
-	centerButton.title = "Cancel";
-	centerButton.style.left = `${CENTER_X}px`;
-	centerButton.style.top = `${CENTER_Y + CENTER_BTN_OFFSET}px`;
-	centerButton.append(createMaterialIcon("close"));
-	centerButton.addEventListener("click", onCancel);
+  const centerButton = document.createElement("button");
+  centerButton.type = "button";
+  centerButton.className = "placement-dialog__center-btn";
+  centerButton.title = "Cancel";
+  centerButton.style.left = `${CENTER_X}px`;
+  centerButton.style.top = `${CENTER_Y + CENTER_BTN_OFFSET}px`;
+  centerButton.append(createMaterialIcon("close"));
+  centerButton.addEventListener("click", onCancel);
 
-	const pin = document.createElement("div");
-	pin.className = "placement-dialog__pin";
-	pin.setAttribute("aria-hidden", "true");
+  const pin = document.createElement("div");
+  pin.className = "placement-dialog__pin";
+  pin.setAttribute("aria-hidden", "true");
 
-	root.append(arc, centerButton, pin);
+  root.append(arc, centerButton, pin);
 
-	return root;
+  return root;
 }

@@ -20,10 +20,19 @@ def location_from_json(data: dict) -> Location:
     )
 
 
+def charging_station_to_dict(station, visit_day: DayOfWeek | None = None) -> dict:
+    data = asdict(station)
+    data["charger_type"] = station.charger_type.name
+    data["visit_day"] = visit_day.name if visit_day is not None else None
+    return data
+
+
 def plan_to_dict(result: dict) -> dict:
     return {
-        "charging_stations": [asdict(station) for station in result["charging_stations"]],
-        "visit_day": result["visit_day"].name,
+        "charging_stations": [
+            charging_station_to_dict(entry["station"], entry.get("visit_day"))
+            for entry in result["charging_stations"]
+        ],
         "weekly_distance": {
             day.name: distance for day, distance in result["weekly_distance"].items()
         },

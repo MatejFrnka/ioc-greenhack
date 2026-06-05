@@ -53,9 +53,13 @@ class MockBackend(Backend):
         )
 
     def plan(self, home: Location, locations: list[Location]) -> dict:
+        stations = self.best_charging_stations(home)
         return {
-            "charging_stations": self.best_charging_stations(home),
-            "visit_day": DayOfWeek.WEDNESDAY,
+            "charging_stations": [
+                {"station": stations[0], "visit_day": DayOfWeek.WEDNESDAY},
+                {"station": stations[1], "visit_day": None},
+                {"station": stations[2], "visit_day": DayOfWeek.FRIDAY},
+            ],
             "weekly_distance": self.estimate_distance(home, locations),
             "fuel_price": 1.45,
             "electricity_price": 0.28,
