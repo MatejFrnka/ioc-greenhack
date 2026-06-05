@@ -34,6 +34,17 @@ export interface ChargingStation {
   charge_minutes: number;
 }
 
+export interface PathPoint {
+  lat: number;
+  lng: number;
+}
+
+export interface PathFromHome {
+  distance: number;
+  travel_time?: number;
+  path: PathPoint[];
+}
+
 export interface PlanResponse {
   charging_stations: ChargingStation[];
   weekly_distance: Record<DayOfWeek, number>;
@@ -41,6 +52,7 @@ export interface PlanResponse {
   fuel_price: number;
   electricity_price: number;
   extra_walk_time: number;
+  paths_from_home: PathFromHome[];
   feasible?: boolean;
   reason?: string | null;
 }

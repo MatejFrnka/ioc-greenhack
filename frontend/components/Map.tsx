@@ -22,6 +22,7 @@ import {
   formatVisitDay,
   pointsToPlanRequest,
   type ChargingStation,
+  type PathFromHome,
   type PlanResponse,
   type StationCoordinate,
 } from "@/lib/plan";
@@ -42,7 +43,22 @@ const DEFAULT_CENTER: [number, number] = [14.4378, 50.0755];
 const DEFAULT_ZOOM = 11;
 const ALL_STATIONS_SOURCE_ID = "all-stations";
 const ALL_STATIONS_LAYER_ID = "all-stations-dots";
+const PATHS_SOURCE_ID = "paths-from-home";
+const PATHS_LAYER_ID = "paths-from-home-lines";
 const PRIMARY_COLOR = "#95e06c";
+const PATHS_LINE_WIDTH: maplibregl.ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  8,
+  2,
+  11,
+  3,
+  14,
+  4,
+  17,
+  6,
+];
 const ALL_STATIONS_CIRCLE_RADIUS: maplibregl.ExpressionSpecification = [
   "interpolate",
   ["linear"],
@@ -70,6 +86,80 @@ function stationsToGeoJSON(
   };
 }
 
+function pathsToGeoJSON(
+  paths: PathFromHome[],
+  locationPoints: MapPoint[]
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: paths.flatMap((path, index) => {
+      if (path.path.length < 2) return [];
+
+      return [
+        {
+          type: "Feature" as const,
+          geometry: {
+            type: "LineString" as const,
+            coordinates: path.path.map((point) => [point.lng, point.lat]),
+          },
+          properties: {
+            distance: path.distance,
+            color:
+              POINT_TYPE_CONFIG[locationPoints[index]?.type ?? "question_mark"]
+                .color,
+          },
+        },
+      ];
+    }),
+  };
+}
+
+function removePathsLayer(map: maplibregl.Map) {
+  if (map.getLayer(PATHS_LAYER_ID)) {
+    map.removeLayer(PATHS_LAYER_ID);
+  }
+  if (map.getSource(PATHS_SOURCE_ID)) {
+    map.removeSource(PATHS_SOURCE_ID);
+  }
+}
+
+function updatePathsFromHomeLayer(
+  map: maplibregl.Map,
+  paths: PathFromHome[],
+  locationPoints: MapPoint[]
+) {
+  if (paths.length === 0) {
+    removePathsLayer(map);
+    return;
+  }
+
+  const data = pathsToGeoJSON(paths, locationPoints);
+  const existing = map.getSource(PATHS_SOURCE_ID) as
+    | maplibregl.GeoJSONSource
+    | undefined;
+
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+
+  map.addSource(PATHS_SOURCE_ID, { type: "geojson", data });
+  map.addLayer({
+    id: PATHS_LAYER_ID,
+    type: "line",
+    source: PATHS_SOURCE_ID,
+    layout: {
+      "line-join": "round",
+      "line-cap": "round",
+    },
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": PATHS_LINE_WIDTH,
+      "line-opacity": 0.85,
+    },
+  });
+}
+
 function updateAllStationsLayer(
   map: maplibregl.Map,
   stations: StationCoordinate[]
@@ -87,7 +177,7 @@ function updateAllStationsLayer(
         "circle-color",
         PRIMARY_COLOR
       );
-      map.setPaintProperty(ALL_STATIONS_LAYER_ID, "circle-opacity", 0.5);
+      map.setPaintProperty(ALL_STATIONS_LAYER_ID, "circle-opacity", 1);
     }
     return;
   }
@@ -100,7 +190,7 @@ function updateAllStationsLayer(
     paint: {
       "circle-radius": ALL_STATIONS_CIRCLE_RADIUS,
       "circle-color": PRIMARY_COLOR,
-      "circle-opacity": 0.85,
+      "circle-opacity": 1,
     },
   });
 }
@@ -207,6 +297,7 @@ export default function Map({
     useState<number>(DEFAULT_BATTERY_KWH);
 
   const chargingStations = plan?.charging_stations ?? [];
+  const pathsFromHome = plan?.paths_from_home ?? [];
   pointsRef.current = points;
 
   // Hovering a charging session in the list highlights its marker; it lingers
@@ -381,9 +472,13 @@ export default function Map({
       schedulePopupRef.current = null;
     };
 
-    const resolvePoint = (pointOrId: MapPoint | string): MapPoint | undefined => {
+    const resolvePoint = (
+      pointOrId: MapPoint | string
+    ): MapPoint | undefined => {
       if (typeof pointOrId === "string") {
-        return pointsRef.current.find((candidate) => candidate.id === pointOrId);
+        return pointsRef.current.find(
+          (candidate) => candidate.id === pointOrId
+        );
       }
       return (
         pointsRef.current.find((candidate) => candidate.id === pointOrId.id) ??
@@ -467,9 +562,7 @@ export default function Map({
       const target = event.originalEvent.target;
       if (
         target instanceof Element &&
-        target.closest(
-          ".schedule-dialog, .placement-dialog, .maplibregl-popup"
-        )
+        target.closest(".schedule-dialog, .placement-dialog, .maplibregl-popup")
       ) {
         return;
       }
@@ -516,6 +609,7 @@ export default function Map({
       if (map.getSource(ALL_STATIONS_SOURCE_ID)) {
         map.removeSource(ALL_STATIONS_SOURCE_ID);
       }
+      removePathsLayer(map);
       map.remove();
       mapRef.current = null;
     };
@@ -533,6 +627,27 @@ export default function Map({
       map.once("load", apply);
     }
   }, [allStations]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const locationPoints = points.filter((point) => point.type !== "home");
+
+    const apply = () => {
+      if (sidebarView !== "analysis" || pathsFromHome.length === 0) {
+        removePathsLayer(map);
+        return;
+      }
+      updatePathsFromHomeLayer(map, pathsFromHome, locationPoints);
+    };
+
+    if (map.isStyleLoaded()) {
+      apply();
+    } else {
+      map.once("load", apply);
+    }
+  }, [pathsFromHome, points, sidebarView]);
 
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
