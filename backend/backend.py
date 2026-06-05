@@ -19,3 +19,11 @@ class Backend(abc.ABC):
     def distance(self, a: Location, b: Location) -> float:
         """One-way distance a<->b in km (used for per-leg drive events)."""
         pass
+
+    @abc.abstractmethod
+    def walking_path(self, location: Location, charger: ChargingStation):
+        pass
+
+    @abc.abstractmethod
+    def drive_path(self, location_from: Location, location_to: Location):
+        pass
