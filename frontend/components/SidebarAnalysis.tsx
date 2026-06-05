@@ -1,6 +1,5 @@
+import BatteryChart from "@/components/BatteryChart";
 import {
-  ALL_DAYS,
-  DAY_SHORT_LABELS,
   chargingStationKey,
   formatVisitDay,
   formatWeeklyCzk,
@@ -12,6 +11,7 @@ interface SidebarAnalysisProps {
   plan: PlanResponse | null;
   planLoading: boolean;
   planError: string | null;
+  onHoverChargingStation: (key: string | null) => void;
 }
 
 function PlanStat({ label, value }: { label: string; value: string }) {
@@ -27,6 +27,7 @@ export default function SidebarAnalysis({
   plan,
   planLoading,
   planError,
+  onHoverChargingStation,
 }: SidebarAnalysisProps) {
   return (
     <div className="flex flex-col gap-6 px-8 py-6">
@@ -71,21 +72,12 @@ export default function SidebarAnalysis({
       )}
 
       {plan && !planError &&
-        Object.keys(plan.daily_remaining_kwh ?? {}).length > 0 && (
+        Object.keys(plan.daily_peak_kwh ?? {}).length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-zinc-900">
-              Battery remaining by day
+              Peak battery by day
             </h3>
-            <ul className="mt-2 flex flex-col gap-1 text-sm">
-              {ALL_DAYS.map((day) => (
-                <li key={day} className="flex items-center justify-between">
-                  <span className="text-zinc-500">{DAY_SHORT_LABELS[day]}</span>
-                  <span className="font-medium text-zinc-900">
-                    {(plan.daily_remaining_kwh[day] ?? 0).toFixed(1)} kWh
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <BatteryChart dailyPeak={plan.daily_peak_kwh} />
           </div>
         )}
 
@@ -94,27 +86,49 @@ export default function SidebarAnalysis({
           <h3 className="text-sm font-semibold text-zinc-900">
             Charging sessions
           </h3>
-          <ul className="mt-2 flex flex-col gap-2 text-sm">
-            {plan.charging_stations.map((station, index) => (
-              <li
-                key={chargingStationKey(station, index)}
-                className="flex items-baseline justify-between gap-3"
-              >
-                <span className="text-zinc-900">
-                  <span className="font-medium">
-                    {formatVisitDay(station.visit_day)}
-                  </span>{" "}
-                  <span className="text-zinc-500">
-                    {station.charger_kilowatts}kW {station.charger_type}
+          <ul className="mt-2 flex flex-col gap-2">
+            {plan.charging_stations.map((station, index) => {
+              const key = chargingStationKey(station, index);
+              const isDc = station.charger_type === "DC";
+              return (
+                <li
+                  key={key}
+                  onMouseEnter={() => onHoverChargingStation(key)}
+                  onMouseLeave={() => onHoverChargingStation(null)}
+                  className="flex items-center gap-3 rounded-xl border border-zinc-100 bg-zinc-50/70 px-3 py-2.5 transition hover:border-primary/50 hover:bg-primary/5"
+                >
+                  <span
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full text-white shadow-sm"
+                    style={{ backgroundColor: isDc ? "#16a34a" : "#ca8a04" }}
+                  >
+                    <span className="material-icons text-[18px] leading-none">
+                      ev_station
+                    </span>
                   </span>
-                </span>
-                <span className="text-right text-zinc-500">
-                  {station.charged_kwh.toFixed(1)} kWh ·{" "}
-                  {Math.round(station.charge_minutes)} min ·{" "}
-                  {station.distance_to_location.toFixed(1)} km away
-                </span>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-zinc-900">
+                        {formatVisitDay(station.visit_day)}
+                      </span>
+                      <span className="rounded-full bg-zinc-200/70 px-2 py-0.5 text-[11px] font-medium text-zinc-600">
+                        {station.charger_kilowatts}kW {station.charger_type}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-zinc-500">
+                      <span className="font-medium text-zinc-700">
+                        {station.charged_kwh.toFixed(1)} kWh
+                      </span>
+                      <span className="text-zinc-300">·</span>
+                      <span>{Math.round(station.charge_minutes)} min</span>
+                      <span className="text-zinc-300">·</span>
+                      <span>
+                        {station.distance_to_location.toFixed(1)} km away
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

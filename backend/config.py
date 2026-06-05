@@ -2,7 +2,7 @@
 
 # --- driving / battery ---
 CONSUMPTION_KWH_PER_KM = 0.17   # average energy used while driving
-FLOOR_FRACTION = 0.50           # never let the battery drop below this (0..1)
+FLOOR_FRACTION = 0.25           # never let the battery drop below this (0..1)
 END_FRACTION = 0.80             # battery level required at the END of the week (0..1).
                                 # Lower than the 100% start, so the solver isn't forced
                                 # into a last-day top-up just to refill what it started with.
