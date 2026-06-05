@@ -45,6 +45,8 @@ const ALL_STATIONS_SOURCE_ID = "all-stations";
 const ALL_STATIONS_LAYER_ID = "all-stations-dots";
 const PATHS_SOURCE_ID = "paths-from-home";
 const PATHS_LAYER_ID = "paths-from-home-lines";
+const STATION_PATHS_SOURCE_ID = "paths-from-stations";
+const STATION_PATHS_LAYER_ID = "paths-from-stations-lines";
 const PRIMARY_COLOR = "#95e06c";
 const PATHS_LINE_WIDTH: maplibregl.ExpressionSpecification = [
   "interpolate",
@@ -121,6 +123,82 @@ function removePathsLayer(map: maplibregl.Map) {
   if (map.getSource(PATHS_SOURCE_ID)) {
     map.removeSource(PATHS_SOURCE_ID);
   }
+}
+
+function stationPathsToGeoJSON(
+  paths: PathFromHome[],
+  chargingStations: ChargingStation[]
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: paths.flatMap((path, index) => {
+      if (path.path.length < 2) return [];
+
+      const station = chargingStations[index];
+      const color =
+        station?.charger_type === "AC"
+          ? CHARGING_STATION_AC_COLOR
+          : CHARGING_STATION_DC_COLOR;
+
+      return [
+        {
+          type: "Feature" as const,
+          geometry: {
+            type: "LineString" as const,
+            coordinates: path.path.map((point) => [point.lng, point.lat]),
+          },
+          properties: { distance: path.distance, color },
+        },
+      ];
+    }),
+  };
+}
+
+function removeStationPathsLayer(map: maplibregl.Map) {
+  if (map.getLayer(STATION_PATHS_LAYER_ID)) {
+    map.removeLayer(STATION_PATHS_LAYER_ID);
+  }
+  if (map.getSource(STATION_PATHS_SOURCE_ID)) {
+    map.removeSource(STATION_PATHS_SOURCE_ID);
+  }
+}
+
+function updatePathsFromStationsLayer(
+  map: maplibregl.Map,
+  paths: PathFromHome[],
+  chargingStations: ChargingStation[]
+) {
+  if (paths.length === 0) {
+    removeStationPathsLayer(map);
+    return;
+  }
+
+  const data = stationPathsToGeoJSON(paths, chargingStations);
+  const existing = map.getSource(STATION_PATHS_SOURCE_ID) as
+    | maplibregl.GeoJSONSource
+    | undefined;
+
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+
+  map.addSource(STATION_PATHS_SOURCE_ID, { type: "geojson", data });
+  map.addLayer({
+    id: STATION_PATHS_LAYER_ID,
+    type: "line",
+    source: STATION_PATHS_SOURCE_ID,
+    layout: {
+      "line-join": "round",
+      "line-cap": "round",
+    },
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": PATHS_LINE_WIDTH,
+      "line-opacity": 0.9,
+      "line-dasharray": [2, 2],
+    },
+  });
 }
 
 function updatePathsFromHomeLayer(
@@ -298,6 +376,7 @@ export default function Map({
 
   const chargingStations = plan?.charging_stations ?? [];
   const pathsFromHome = plan?.paths_from_home ?? [];
+  const pathsFromStations = plan?.paths_from_stations ?? [];
   pointsRef.current = points;
 
   // Hovering a charging session in the list highlights its marker; it lingers
@@ -610,6 +689,7 @@ export default function Map({
         map.removeSource(ALL_STATIONS_SOURCE_ID);
       }
       removePathsLayer(map);
+      removeStationPathsLayer(map);
       map.remove();
       mapRef.current = null;
     };
@@ -648,6 +728,29 @@ export default function Map({
       map.once("load", apply);
     }
   }, [pathsFromHome, points, sidebarView]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const apply = () => {
+      if (sidebarView !== "analysis" || pathsFromStations.length === 0) {
+        removeStationPathsLayer(map);
+        return;
+      }
+      updatePathsFromStationsLayer(
+        map,
+        pathsFromStations,
+        chargingStations
+      );
+    };
+
+    if (map.isStyleLoaded()) {
+      apply();
+    } else {
+      map.once("load", apply);
+    }
+  }, [pathsFromStations, chargingStations, sidebarView]);
 
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();

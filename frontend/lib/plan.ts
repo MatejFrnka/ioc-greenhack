@@ -53,6 +53,7 @@ export interface PlanResponse {
   electricity_price: number;
   extra_walk_time: number;
   paths_from_home: PathFromHome[];
+  paths_from_stations: PathFromHome[];
   feasible?: boolean;
   reason?: string | null;
 }
