@@ -20,9 +20,15 @@ class Location:
     visits: list[DayOfWeek]
 
 
+class ChargerType(enum.Enum):
+    AC = 0
+    DC = 1
+
+
 @dataclasses.dataclass
 class ChargingStation:
     lat: float
     long: float
-    charger_type: str
-    cost_value: float
+    charger_type: ChargerType
+    charger_kilowatts: int  # kw
+    distance_to_location: float
