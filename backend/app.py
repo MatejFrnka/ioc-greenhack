@@ -26,7 +26,7 @@ def plan():
     home = location_from_json(data["home"])
     locations = [location_from_json(loc) for loc in data["locations"]]
 
-    result, _capacity, _wkm, _wkwh, distances = optimize(
+    result, _capacity, _wkm, _wkwh, distances, reason = optimize(
         backend, home=home, locations=locations
     )
 
@@ -36,6 +36,8 @@ def plan():
         "fuel_price": FUEL_PRICE,
         "electricity_price": ELECTRICITY_PRICE,
         "extra_walk_time": EXTRA_WALK_TIME,
+        "feasible": result is not None,
+        "reason": reason,
     })
 
 

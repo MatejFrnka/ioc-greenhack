@@ -29,6 +29,8 @@ export interface PlanResponse {
   fuel_price: number;
   electricity_price: number;
   extra_walk_time: number;
+  feasible?: boolean;
+  reason?: string | null;
 }
 
 export const ALL_DAYS: DayOfWeek[] = [

@@ -3,7 +3,12 @@
 # --- driving / battery ---
 CONSUMPTION_KWH_PER_KM = 0.17   # average energy used while driving
 FLOOR_FRACTION = 0.50           # never let the battery drop below this (0..1)
-SIZING_MARGIN = 0.10            # spare battery on top of the weekly need
+END_FRACTION = 0.80             # battery level required at the END of the week (0..1).
+                                # Lower than the 100% start, so the solver isn't forced
+                                # into a last-day top-up just to refill what it started with.
+BATTERY_KWH = 60.0              # real pack size. The floor binds mid-week, so the
+                                # solver is FORCED to charge on specific days; light
+                                # weeks may legitimately need only one charge.
 
 # --- charging-session penalty ---
 # The n-th charge "costs" n * this many km, so charging often gets pricier.

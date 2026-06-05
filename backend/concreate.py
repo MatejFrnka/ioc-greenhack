@@ -64,6 +64,10 @@ class ConcreateBackend(Backend):
 
         return dists
 
+    def distance(self, a: Location, b: Location) -> float:
+        # one-way, km
+        return self._air_distance(a.lat, a.long, b.lat, b.long)
+
     def find_walking_path(self, location: Location, charger: ChargingStation):
         pass
 
