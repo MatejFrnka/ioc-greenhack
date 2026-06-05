@@ -42,8 +42,12 @@ def plan():
     walk_km = sum(s["distance_to_location"] for s in stations) * 2.0
     extra_walk_time = round(walk_km / WALK_SPEED_KMPH * 60.0)
 
+    stations_result = [s.copy() for s in stations]
+    for s in stations_result:
+        del s['location_from']
+
     return jsonify({
-        "charging_stations": stations,
+        "charging_stations": stations_result,
         "weekly_distance": {day.name: km for day, km in distances.items()},
         "daily_peak_kwh": {
             day.name: kwh for day, kwh in daily_peak_kwh(result, capacity).items()
@@ -54,6 +58,7 @@ def plan():
         "feasible": result is not None,
         "reason": reason,
         "paths_from_home": [backend.drive_path(home, loc) for loc in locations],
+        "paths_from_stations": [backend.walking_path(s['location_from'], (s['lat'], s['long'])) for s in stations]
     })
 
 

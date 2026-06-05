@@ -21,7 +21,7 @@ class Backend(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def walking_path(self, location: Location, charger: ChargingStation):
+    def walking_path(self, location: Location, charger: tuple[float, float]):
         pass
 
     @abc.abstractmethod

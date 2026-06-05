@@ -69,6 +69,8 @@ class ConcreateBackend(Backend):
                 ("connector_3_type", "connector_3_power_kw"),
             ]
 
+            distance_to_loc = self._pstore.get(location.lat, location.long, lat, lon, 'walking')['distance_m'] / 1000.0
+
             for type_col, power_col in connectors:
                 charger_type = row.get(type_col)
                 power = row.get(power_col)
@@ -85,7 +87,7 @@ class ConcreateBackend(Backend):
                         charger_kilowatts=int(power),
                         # distance_to_location=self._air_distance(location.lat, location.long, lat, lon),
                         # Google returns metres; this field is a distance in km (used as the detour penalty).
-                        distance_to_location=self._pstore.get(location.lat, location.long, lat, lon)['distance_m'] / 1000.0,
+                        distance_to_location=distance_to_loc,
                     )
                 )
 
@@ -119,8 +121,8 @@ class ConcreateBackend(Backend):
         # one-way road distance in km, matching estimate_distance (cached in PathStore).
         return self._pstore.get(a.lat, a.long, b.lat, b.long)['distance_m'] / 1000.0
 
-    def walking_path(self, location: Location, charger: ChargingStation):
-        route = self._pstore.get(location.lat, location.long, charger.lat, charger.long, 'walking')
+    def walking_path(self, location: Location, charger: tuple[float, float]):
+        route = self._pstore.get(location.lat, location.long, charger[0], charger[1], 'walking')
 
         coords = googlemaps.convert.decode_polyline(route['polyline'])
         return {
