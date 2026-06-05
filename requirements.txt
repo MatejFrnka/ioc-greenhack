@@ -2,3 +2,7 @@ flask
 flask-cors
 click
 networkit
+pandas
+geopandas
+dotenv
+googlemaps
