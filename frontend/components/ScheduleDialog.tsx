@@ -1,132 +1,150 @@
-"use client";
-
-import { useState } from "react";
-import {
-  POINT_TYPE_CONFIG,
-  type DayOfWeek,
-  type PointType,
-} from "@/lib/map-points";
+import type { DayOfWeek, PointType } from "@/lib/map-points";
 import {
   ALL_DAYS,
   DAY_SHORT_LABELS,
-  DEFAULT_VISITS,
   defaultHoursForType,
 } from "@/lib/plan";
 
-interface ScheduleDialogProps {
+interface ScheduleDialogHandlers {
   type: PointType;
+  initialVisits: DayOfWeek[];
+  initialHours?: number;
   onConfirm: (visits: DayOfWeek[], hours: number) => void;
   onCancel: () => void;
+  onDelete: () => void;
 }
 
 const MIN_HOURS = 0.5;
 const MAX_HOURS = 16;
 const HOURS_STEP = 0.5;
 
+function createMaterialIcon(name: string): HTMLSpanElement {
+  const icon = document.createElement("span");
+  icon.className = "material-icons schedule-dialog__icon-glyph";
+  icon.textContent = name;
+  return icon;
+}
+
 function formatHours(hours: number): string {
   return Number.isInteger(hours) ? `${hours}` : hours.toFixed(1);
 }
 
-export default function ScheduleDialog({
+export function createScheduleDialogElement({
   type,
+  initialVisits,
+  initialHours = defaultHoursForType(type),
   onConfirm,
   onCancel,
-}: ScheduleDialogProps) {
-  const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
-  const [selectedDays, setSelectedDays] = useState<Set<DayOfWeek>>(
-    () => new Set(DEFAULT_VISITS[type])
-  );
-  const [hours, setHours] = useState(defaultHoursForType(type));
+  onDelete,
+}: ScheduleDialogHandlers): HTMLElement {
+  const selectedDays = new Set<DayOfWeek>(initialVisits);
+  let hours = initialHours;
 
-  const toggleDay = (day: DayOfWeek) => {
-    setSelectedDays((current) => {
-      const next = new Set(current);
-      if (next.has(day)) {
-        next.delete(day);
-      } else {
-        next.add(day);
-      }
-      return next;
-    });
+  const root = document.createElement("div");
+  root.className = "schedule-dialog";
+
+  const daysSection = document.createElement("div");
+  daysSection.className = "schedule-dialog__section";
+
+  const daysLabel = document.createElement("p");
+  daysLabel.className = "schedule-dialog__label";
+  daysLabel.textContent = "Visit days";
+
+  const daysGrid = document.createElement("div");
+  daysGrid.className = "schedule-dialog__days";
+
+  const dayButtons = new Map<DayOfWeek, HTMLButtonElement>();
+
+  const syncDayButton = (day: DayOfWeek) => {
+    const button = dayButtons.get(day);
+    if (!button) return;
+    const active = selectedDays.has(day);
+    button.classList.toggle("schedule-dialog__day-btn--active", active);
+    button.setAttribute("aria-pressed", String(active));
   };
 
-  return (
-    <div className="pointer-events-auto flex w-72 flex-col gap-2.5 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-lg">
-      <div className="flex items-center gap-2">
-        <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-white shadow-sm"
-          style={{ backgroundColor: color, color: foreground }}
-        >
-          <span className="material-icons text-base leading-none">{icon}</span>
-        </span>
-        <span className="text-sm font-semibold text-zinc-900">{label}</span>
-      </div>
+  for (const day of ALL_DAYS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "schedule-dialog__day-btn";
+    button.title = DAY_SHORT_LABELS[day];
+    button.textContent = DAY_SHORT_LABELS[day];
+    button.addEventListener("click", () => {
+      if (selectedDays.has(day)) {
+        selectedDays.delete(day);
+      } else {
+        selectedDays.add(day);
+      }
+      syncDayButton(day);
+    });
+    dayButtons.set(day, button);
+    syncDayButton(day);
+    daysGrid.append(button);
+  }
 
-      <div>
-        <p className="mb-1.5 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-          Visit days
-        </p>
-        <div className="grid grid-cols-7 gap-1">
-          {ALL_DAYS.map((day) => {
-            const active = selectedDays.has(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                title={DAY_SHORT_LABELS[day]}
-                aria-pressed={active}
-                onClick={() => toggleDay(day)}
-                className={`rounded-lg px-0 py-1.5 text-[10px] font-semibold transition ${
-                  active
-                    ? "bg-[#297373] text-white"
-                    : "border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
-                }`}
-              >
-                {DAY_SHORT_LABELS[day]}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+  daysSection.append(daysLabel, daysGrid);
 
-      <div>
-        <p className="mb-1.5 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-          Hours per visit
-        </p>
-        <div className="flex items-center gap-2.5">
-          <input
-            type="range"
-            min={MIN_HOURS}
-            max={MAX_HOURS}
-            step={HOURS_STEP}
-            value={hours}
-            onChange={(event) => setHours(Number(event.target.value))}
-            className="h-1.5 min-w-0 flex-1 cursor-pointer accent-[#297373]"
-          />
-          <span className="w-10 shrink-0 text-right text-[13px] font-semibold text-zinc-900">
-            {formatHours(hours)} h
-          </span>
-        </div>
-      </div>
+  const hoursSection = document.createElement("div");
+  hoursSection.className = "schedule-dialog__section";
 
-      <div className="flex justify-end gap-2 pt-0.5">
-        <button
-          type="button"
-          title="Cancel"
-          onClick={onCancel}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 transition hover:scale-105 hover:bg-zinc-200"
-        >
-          <span className="material-icons text-lg leading-none">close</span>
-        </button>
-        <button
-          type="button"
-          title="Add place"
-          onClick={() => onConfirm([...selectedDays], hours)}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#297373] text-white transition hover:scale-105 hover:bg-[#1f5757]"
-        >
-          <span className="material-icons text-lg leading-none">check</span>
-        </button>
-      </div>
-    </div>
-  );
+  const hoursLabel = document.createElement("p");
+  hoursLabel.className = "schedule-dialog__label";
+  hoursLabel.textContent = "Hours per visit";
+
+  const hoursRow = document.createElement("div");
+  hoursRow.className = "schedule-dialog__hours-row";
+
+  const hoursValue = document.createElement("span");
+  hoursValue.className = "schedule-dialog__hours-value";
+
+  const syncHoursValue = () => {
+    hoursValue.textContent = `${formatHours(hours)} h`;
+  };
+
+  const hoursSlider = document.createElement("input");
+  hoursSlider.type = "range";
+  hoursSlider.className = "schedule-dialog__hours-slider";
+  hoursSlider.min = String(MIN_HOURS);
+  hoursSlider.max = String(MAX_HOURS);
+  hoursSlider.step = String(HOURS_STEP);
+  hoursSlider.value = String(hours);
+  hoursSlider.addEventListener("input", () => {
+    hours = Number(hoursSlider.value);
+    syncHoursValue();
+  });
+
+  syncHoursValue();
+  hoursRow.append(hoursSlider, hoursValue);
+  hoursSection.append(hoursLabel, hoursRow);
+
+  const actions = document.createElement("div");
+  actions.className = "schedule-dialog__actions";
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "schedule-dialog__delete-btn";
+  deleteButton.title = "Delete";
+  deleteButton.append(createMaterialIcon("delete"));
+  deleteButton.addEventListener("click", onDelete);
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "schedule-dialog__cancel-btn";
+  cancelButton.title = "Cancel";
+  cancelButton.append(createMaterialIcon("close"));
+  cancelButton.addEventListener("click", onCancel);
+
+  const confirmButton = document.createElement("button");
+  confirmButton.type = "button";
+  confirmButton.className = "schedule-dialog__confirm-btn";
+  confirmButton.title = "Save";
+  confirmButton.append(createMaterialIcon("check"));
+  confirmButton.addEventListener("click", () => {
+    onConfirm([...selectedDays], hours);
+  });
+
+  actions.append(deleteButton, cancelButton, confirmButton);
+  root.append(daysSection, hoursSection, actions);
+
+  return root;
 }

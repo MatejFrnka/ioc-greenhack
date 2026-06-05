@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { getMapStyle } from "@/lib/map-style";
 import {
   POINT_TYPE_CONFIG,
+  type DayOfWeek,
   type MapPoint,
   type PointType,
 } from "@/lib/map-points";
@@ -20,19 +21,12 @@ import {
   type PlanResponse,
 } from "@/lib/plan";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
-import { createPointActionDialogElement } from "@/components/PointActionDialog";
+import { createScheduleDialogElement } from "@/components/ScheduleDialog";
 import { type SelectedPlace } from "@/components/PlacesSearchBar";
-import ScheduleDialog from "@/components/ScheduleDialog";
 import Sidebar, {
   type PlacementStage,
   type SidebarView,
 } from "@/components/Sidebar";
-
-interface ScheduleDraft {
-  lng: number;
-  lat: number;
-  type: PointType;
-}
 
 interface MapProps {
   center?: [number, number];
@@ -91,8 +85,10 @@ export default function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const placementPopupRef = useRef<maplibregl.Popup | null>(null);
-  const pointActionPopupRef = useRef<maplibregl.Popup | null>(null);
-  const openPointActionPopupRef = useRef<(point: MapPoint) => void>(() => {});
+  const schedulePopupRef = useRef<maplibregl.Popup | null>(null);
+  const openSchedulePopupRef = useRef<
+    (point: MapPoint, options?: { isNew?: boolean }) => void
+  >(() => {});
   const openPlacementPopupRef = useRef<(lng: number, lat: number) => void>(
     () => {}
   );
@@ -111,15 +107,14 @@ export default function Map({
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
-  const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft | null>(
-    null
-  );
-  const [scheduleScreenPos, setScheduleScreenPos] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const openScheduleRef = useRef<(draft: ScheduleDraft) => void>(() => {});
   const planAbortRef = useRef<AbortController | null>(null);
+  const addPointWithDefaultsRef = useRef<
+    (lng: number, lat: number, type: PointType) => MapPoint
+  >(() => ({}) as MapPoint);
+  const updatePointRef = useRef<
+    (id: string, visits: DayOfWeek[], timeSpentMinutes: number) => void
+  >(() => {});
+  const removePointRef = useRef<(id: string) => void>(() => {});
 
   const chargingStations = plan?.charging_stations ?? [];
 
@@ -145,72 +140,48 @@ export default function Map({
 
   addHomePointRef.current = addHomePoint;
 
-  const addLocationPoint = useCallback(
-    (
-      lng: number,
-      lat: number,
-      type: PointType,
-      visits: MapPoint["visits"],
-      timeSpentMinutes: number
-    ) => {
-      setPoints((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          lng,
-          lat,
-          type,
-          visits,
-          timeSpentMinutes,
-        },
-      ]);
+  const addPointWithDefaults = useCallback(
+    (lng: number, lat: number, type: PointType): MapPoint => {
+      const point: MapPoint = {
+        id: crypto.randomUUID(),
+        lng,
+        lat,
+        type,
+        visits: DEFAULT_VISITS[type],
+        timeSpentMinutes: DEFAULT_TIME_SPENT_MINUTES[type],
+      };
+      setPoints((current) => [...current, point]);
+      return point;
     },
     []
   );
+
+  const updatePoint = useCallback(
+    (id: string, visits: DayOfWeek[], timeSpentMinutes: number) => {
+      setPoints((current) =>
+        current.map((point) =>
+          point.id === id ? { ...point, visits, timeSpentMinutes } : point
+        )
+      );
+    },
+    []
+  );
+
+  addPointWithDefaultsRef.current = addPointWithDefaults;
+  updatePointRef.current = updatePoint;
 
   useEffect(() => {
     const hasHome = points.some((point) => point.type === "home");
     setPlacementStage(hasHome ? "locations" : "home");
   }, [points]);
 
-  openScheduleRef.current = (draft) => {
-    setScheduleDraft(draft);
-  };
-
-  const updateScheduleScreenPos = useCallback(() => {
-    if (!scheduleDraft || !mapRef.current) return;
-    const point = mapRef.current.project([
-      scheduleDraft.lng,
-      scheduleDraft.lat,
-    ]);
-    setScheduleScreenPos({ x: point.x, y: point.y });
-  }, [scheduleDraft]);
-
-  useEffect(() => {
-    if (!scheduleDraft) {
-      setScheduleScreenPos(null);
-      return;
-    }
-
-    updateScheduleScreenPos();
-
-    const map = mapRef.current;
-    if (!map) return;
-
-    map.on("move", updateScheduleScreenPos);
-    map.on("zoom", updateScheduleScreenPos);
-
-    return () => {
-      map.off("move", updateScheduleScreenPos);
-      map.off("zoom", updateScheduleScreenPos);
-    };
-  }, [scheduleDraft, updateScheduleScreenPos]);
-
   const removePoint = useCallback((id: string) => {
     setPoints((current) => current.filter((point) => point.id !== id));
-    pointActionPopupRef.current?.remove();
-    pointActionPopupRef.current = null;
+    schedulePopupRef.current?.remove();
+    schedulePopupRef.current = null;
   }, []);
+
+  removePointRef.current = removePoint;
 
   const navigateToPoint = useCallback((point: MapPoint) => {
     const map = mapRef.current;
@@ -275,14 +246,17 @@ export default function Map({
       placementPopupRef.current = null;
     };
 
-    const closePointActionPopup = () => {
-      pointActionPopupRef.current?.remove();
-      pointActionPopupRef.current = null;
+    const closeSchedulePopup = () => {
+      schedulePopupRef.current?.remove();
+      schedulePopupRef.current = null;
     };
 
-    const openPointActionPopup = (point: MapPoint) => {
+    const openSchedulePopup = (
+      point: MapPoint,
+      options?: { isNew?: boolean }
+    ) => {
       closePlacementPopup();
-      closePointActionPopup();
+      closeSchedulePopup();
 
       const popup = new maplibregl.Popup({
         closeButton: false,
@@ -292,23 +266,35 @@ export default function Map({
         className: "placement-popup",
       });
 
-      const content = createPointActionDialogElement({
-        onDelete: () => {
-          removePoint(point.id);
-          closePointActionPopup();
+      const content = createScheduleDialogElement({
+        type: point.type,
+        initialVisits: point.visits,
+        initialHours: point.timeSpentMinutes / 60,
+        onConfirm: (visits, hours) => {
+          updatePointRef.current(point.id, visits, Math.round(hours * 60));
+          closeSchedulePopup();
         },
-        onCancel: closePointActionPopup,
+        onCancel: () => {
+          if (options?.isNew) {
+            removePointRef.current(point.id);
+          }
+          closeSchedulePopup();
+        },
+        onDelete: () => {
+          removePointRef.current(point.id);
+          closeSchedulePopup();
+        },
       });
 
       popup.setDOMContent(content).setLngLat([point.lng, point.lat]).addTo(map);
-      pointActionPopupRef.current = popup;
+      schedulePopupRef.current = popup;
     };
 
-    openPointActionPopupRef.current = openPointActionPopup;
+    openSchedulePopupRef.current = openSchedulePopup;
 
     const openPlacementPopup = (lng: number, lat: number) => {
       closePlacementPopup();
-      closePointActionPopup();
+      closeSchedulePopup();
 
       const popup = new maplibregl.Popup({
         closeButton: false,
@@ -321,7 +307,8 @@ export default function Map({
       const content = createPlacementDialogElement({
         onSelect: (type) => {
           closePlacementPopup();
-          openScheduleRef.current({ lng, lat, type });
+          const point = addPointWithDefaultsRef.current(lng, lat, type);
+          openSchedulePopup(point, { isNew: true });
         },
         onCancel: closePlacementPopup,
       });
@@ -333,7 +320,7 @@ export default function Map({
     openPlacementPopupRef.current = openPlacementPopup;
 
     map.on("click", (event) => {
-      setScheduleDraft(null);
+      closeSchedulePopup();
       if (sidebarViewRef.current === "analysis") return;
 
       if (placementStageRef.current === "home") {
@@ -347,8 +334,8 @@ export default function Map({
 
     return () => {
       closePlacementPopup();
-      closePointActionPopup();
-      openPointActionPopupRef.current = () => {};
+      closeSchedulePopup();
+      openSchedulePopupRef.current = () => {};
       openPlacementPopupRef.current = () => {};
       for (const marker of markersRef.current.values()) {
         marker.remove();
@@ -361,7 +348,7 @@ export default function Map({
       map.remove();
       mapRef.current = null;
     };
-  }, [removePoint]);
+  }, []);
 
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
@@ -407,11 +394,10 @@ export default function Map({
   useEffect(() => {
     if (sidebarView !== "analysis") return;
 
-    setScheduleDraft(null);
     placementPopupRef.current?.remove();
     placementPopupRef.current = null;
-    pointActionPopupRef.current?.remove();
-    pointActionPopupRef.current = null;
+    schedulePopupRef.current?.remove();
+    schedulePopupRef.current = null;
   }, [sidebarView]);
 
   useEffect(() => {
@@ -442,7 +428,7 @@ export default function Map({
         element: createMarkerElement(point.type, (event) => {
           event.stopPropagation();
           if (sidebarViewRef.current === "analysis") return;
-          openPointActionPopupRef.current(point);
+          openSchedulePopupRef.current(point);
         }),
         anchor: "center",
       })
@@ -509,32 +495,6 @@ export default function Map({
       >
         <div className="relative h-full w-full overflow-hidden rounded-[100px] shadow-md ring-1 ring-zinc-200/80">
           <div ref={containerRef} className="h-full w-full" />
-
-          {scheduleDraft && scheduleScreenPos && (
-            <div
-              className="pointer-events-none absolute z-20"
-              style={{
-                left: scheduleScreenPos.x,
-                top: scheduleScreenPos.y,
-                transform: "translate(-50%, calc(-100% - 12px))",
-              }}
-            >
-              <ScheduleDialog
-                type={scheduleDraft.type}
-                onConfirm={(visits, hours) => {
-                  addLocationPoint(
-                    scheduleDraft.lng,
-                    scheduleDraft.lat,
-                    scheduleDraft.type,
-                    visits,
-                    Math.round(hours * 60)
-                  );
-                  setScheduleDraft(null);
-                }}
-                onCancel={() => setScheduleDraft(null)}
-              />
-            </div>
-          )}
         </div>
       </div>
     </div>
