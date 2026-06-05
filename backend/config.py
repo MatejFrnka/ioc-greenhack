@@ -40,4 +40,8 @@ SOC_STEP_KWH = 1.0              # DP granularity: smaller = more accurate, slowe
 ELECTRICITY_PRICE_CZK_PER_KWH = 7.0    # what a kWh costs (home/mixed charging)
 FUEL_PRICE_CZK_PER_L = 38.0            # petrol price per litre
 PETROL_L_PER_100KM = 7.0               # consumption of the petrol car we compare against
-EXTRA_WALK_TIME = 12                   # minutes (shown by the frontend)
+
+# --- extra walking caused by charging ---
+# Each charge parks the car at a station some distance from the destination, so
+# you walk there and back. Weekly extra-walk minutes are derived from this speed.
+WALK_SPEED_KMPH = 4.8                   # average walking speed

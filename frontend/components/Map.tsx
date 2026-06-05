@@ -12,6 +12,7 @@ import {
 } from "@/lib/map-points";
 import {
   chargingStationKey,
+  DEFAULT_BATTERY_KWH,
   DEFAULT_TIME_SPENT_MINUTES,
   DEFAULT_VISITS,
   fetchPlan,
@@ -124,6 +125,8 @@ export default function Map({
     string | null
   >(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [batteryCapacity, setBatteryCapacity] =
+    useState<number>(DEFAULT_BATTERY_KWH);
 
   const chargingStations = plan?.charging_stations ?? [];
 
@@ -385,7 +388,7 @@ export default function Map({
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
 
-    const request = pointsToPlanRequest(points);
+    const request = pointsToPlanRequest(points, batteryCapacity);
     if (!request) {
       setPlan(null);
       setPlanError(null);
@@ -414,7 +417,7 @@ export default function Map({
           setPlanLoading(false);
         }
       });
-  }, [points]);
+  }, [points, batteryCapacity]);
 
   useEffect(() => {
     planAbortRef.current?.abort();
@@ -530,6 +533,8 @@ export default function Map({
         onNavigate={navigateToPoint}
         onDelete={removePoint}
         onHoverChargingStation={handleHoverChargingStation}
+        batteryCapacity={batteryCapacity}
+        onBatteryCapacityChange={setBatteryCapacity}
       />
       <div
         className="relative min-w-0 flex-1 p-5"

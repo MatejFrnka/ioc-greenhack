@@ -12,7 +12,16 @@ export interface PlanLocation {
 export interface PlanRequest {
   home: PlanLocation;
   locations: PlanLocation[];
+  battery_kwh: number;
 }
+
+export const BATTERY_CAPACITY_OPTIONS = [
+  { label: "Small", kwh: 40 },
+  { label: "Mid", kwh: 60 },
+  { label: "Large", kwh: 80 },
+] as const;
+
+export const DEFAULT_BATTERY_KWH = 60;
 
 export interface ChargingStation {
   lat: number;
@@ -95,7 +104,10 @@ function pointToLocation(point: MapPoint): PlanLocation {
   };
 }
 
-export function pointsToPlanRequest(points: MapPoint[]): PlanRequest | null {
+export function pointsToPlanRequest(
+  points: MapPoint[],
+  batteryKwh: number
+): PlanRequest | null {
   const homePoint = points.find((point) => point.type === "home");
   if (!homePoint) return null;
 
@@ -104,6 +116,7 @@ export function pointsToPlanRequest(points: MapPoint[]): PlanRequest | null {
     locations: points
       .filter((point) => point.type !== "home")
       .map(pointToLocation),
+    battery_kwh: batteryKwh,
   };
 }
 
