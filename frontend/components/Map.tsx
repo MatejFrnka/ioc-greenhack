@@ -15,11 +15,14 @@ import {
   formatVisitDay,
   pointsToPlanRequest,
   type ChargingStation,
+  type PlanResponse,
 } from "@/lib/plan";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
+import { createPointActionDialogElement } from "@/components/PointActionDialog";
 import PlacesSearchBar, {
   type SelectedPlace,
 } from "@/components/PlacesSearchBar";
+import MapPanel from "@/components/MapPanel";
 
 interface MapProps {
   center?: [number, number];
@@ -29,14 +32,18 @@ interface MapProps {
 const DEFAULT_CENTER: [number, number] = [14.4378, 50.0755];
 const DEFAULT_ZOOM = 11;
 
-function createMarkerElement(type: PointType): HTMLDivElement {
+function createMarkerElement(
+  type: PointType,
+  onClick: (event: MouseEvent) => void
+): HTMLDivElement {
   const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
   const el = document.createElement("div");
   el.className =
-    "flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md";
+    "flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white shadow-md";
   el.style.backgroundColor = color;
   el.style.color = foreground;
   el.title = label;
+  el.addEventListener("click", onClick);
 
   const iconEl = document.createElement("span");
   iconEl.className = "material-icons text-[15px] leading-none";
@@ -78,6 +85,8 @@ export default function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const placementPopupRef = useRef<maplibregl.Popup | null>(null);
+  const pointActionPopupRef = useRef<maplibregl.Popup | null>(null);
+  const openPointActionPopupRef = useRef<(point: MapPoint) => void>(() => {});
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
   const markersRef = useRef(new globalThis.Map<string, maplibregl.Marker>());
   const chargingMarkersRef = useRef(
@@ -86,11 +95,28 @@ export default function Map({
   const initialViewRef = useRef({ center, zoom });
 
   const [points, setPoints] = useState<MapPoint[]>([]);
-  const [chargingStations, setChargingStations] = useState<ChargingStation[]>(
-    []
-  );
+  const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+
+  const chargingStations = plan?.charging_stations ?? [];
+
+  const removePoint = useCallback((id: string) => {
+    setPoints((current) => current.filter((point) => point.id !== id));
+    pointActionPopupRef.current?.remove();
+    pointActionPopupRef.current = null;
+  }, []);
+
+  const navigateToPoint = useCallback((point: MapPoint) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    map.flyTo({
+      center: [point.lng, point.lat],
+      zoom: 15,
+      essential: true,
+    });
+  }, []);
 
   const handlePlaceSelect = useCallback((place: SelectedPlace) => {
     const map = mapRef.current;
@@ -145,6 +171,11 @@ export default function Map({
       placementPopupRef.current = null;
     };
 
+    const closePointActionPopup = () => {
+      pointActionPopupRef.current?.remove();
+      pointActionPopupRef.current = null;
+    };
+
     const addPoint = (lng: number, lat: number, type: PointType) => {
       setPoints((current) => {
         const withoutType = current.filter((point) => point.type !== type);
@@ -160,8 +191,38 @@ export default function Map({
       });
     };
 
+    const openPointActionPopup = (point: MapPoint) => {
+      closePlacementPopup();
+      closePointActionPopup();
+
+      const popup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        anchor: "bottom",
+        offset: 12,
+        className: "placement-popup",
+      });
+
+      const content = createPointActionDialogElement({
+        onDelete: () => {
+          removePoint(point.id);
+          closePointActionPopup();
+        },
+        onCancel: closePointActionPopup,
+      });
+
+      popup
+        .setDOMContent(content)
+        .setLngLat([point.lng, point.lat])
+        .addTo(map);
+      pointActionPopupRef.current = popup;
+    };
+
+    openPointActionPopupRef.current = openPointActionPopup;
+
     const openPlacementPopup = (lngLat: maplibregl.LngLat) => {
       closePlacementPopup();
+      closePointActionPopup();
 
       const popup = new maplibregl.Popup({
         closeButton: false,
@@ -191,6 +252,8 @@ export default function Map({
 
     return () => {
       closePlacementPopup();
+      closePointActionPopup();
+      openPointActionPopupRef.current = () => {};
       searchMarkerRef.current?.remove();
       searchMarkerRef.current = null;
       for (const marker of markersRef.current.values()) {
@@ -204,12 +267,12 @@ export default function Map({
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [removePoint]);
 
   useEffect(() => {
     const request = pointsToPlanRequest(points);
     if (!request) {
-      setChargingStations([]);
+      setPlan(null);
       setPlanError(null);
       setPlanLoading(false);
       return;
@@ -220,12 +283,12 @@ export default function Map({
     setPlanError(null);
 
     fetchPlan(request, controller.signal)
-      .then((plan) => {
-        setChargingStations(plan.charging_stations);
+      .then((response) => {
+        setPlan(response);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setChargingStations([]);
+        setPlan(null);
         setPlanError(
           error instanceof Error ? error.message : "Failed to load plan"
         );
@@ -260,7 +323,10 @@ export default function Map({
       }
 
       const marker = new maplibregl.Marker({
-        element: createMarkerElement(point.type),
+        element: createMarkerElement(point.type, (event) => {
+          event.stopPropagation();
+          openPointActionPopupRef.current(point);
+        }),
         anchor: "center",
       })
         .setLngLat([point.lng, point.lat])
@@ -306,62 +372,17 @@ export default function Map({
     });
   }, [chargingStations]);
 
-  const showChargingPanel =
-    planLoading || planError !== null || chargingStations.length > 0;
-
   return (
     <div className="relative h-full w-full">
       <PlacesSearchBar onPlaceSelect={handlePlaceSelect} />
-      {showChargingPanel && (
-        <div className="absolute bottom-4 left-4 z-10 max-w-xs rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg backdrop-blur-sm">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-zinc-900">
-              Charging stations
-            </h2>
-            {planLoading && (
-              <span className="text-xs text-zinc-500">Loading…</span>
-            )}
-          </div>
-          {planError && (
-            <p className="text-xs text-red-600">{planError}</p>
-          )}
-          {!planError && chargingStations.length === 0 && !planLoading && (
-            <p className="text-xs text-zinc-500">No stations found.</p>
-          )}
-          {!planError && chargingStations.length > 0 && (
-            <ul className="space-y-2">
-              {chargingStations.map((station, index) => (
-                <li
-                  key={chargingStationKey(station, index)}
-                  className="flex items-start gap-2 text-xs text-zinc-700"
-                >
-                  <span
-                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] text-white"
-                    style={{
-                      backgroundColor:
-                        station.charger_type === "DC" ? "#16a34a" : "#ca8a04",
-                    }}
-                  >
-                    <span className="material-icons text-[12px] leading-none">
-                      ev_station
-                    </span>
-                  </span>
-                  <span>
-                    <span className="font-medium text-zinc-900">
-                      {station.charger_kilowatts}kW {station.charger_type}
-                    </span>
-                    <span className="text-zinc-500">
-                      {" "}
-                      · {formatVisitDay(station.visit_day)} ·{" "}
-                      {station.distance_to_location.toFixed(1)} km
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      <MapPanel
+        points={points}
+        plan={plan}
+        planLoading={planLoading}
+        planError={planError}
+        onNavigate={navigateToPoint}
+        onDelete={removePoint}
+      />
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );

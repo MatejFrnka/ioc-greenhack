@@ -19,8 +19,6 @@ const ARC_CENTER_ANGLE = Math.PI / 2;
 const ARC_START = ARC_CENTER_ANGLE + ARC_SPAN / 2;
 const CENTER_DOWN_OFFSET = 40;
 const CENTER_BTN_OFFSET = 22;
-const PIN_HEIGHT = 18;
-const PIN_GAP = 6;
 const EDGE_PAD = 10;
 
 const ARC_HALF_WIDTH = ARC_RADIUS * Math.sin(ARC_SPAN / 2);
@@ -28,7 +26,7 @@ const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF + EDGE_PAD);
 const CENTER_X = DIALOG_WIDTH / 2;
 const CENTER_Y = ARC_RADIUS + ICON_HALF + EDGE_PAD + CENTER_DOWN_OFFSET;
 const DIALOG_HEIGHT =
-  CENTER_Y + CENTER_BTN_OFFSET + CENTER_BTN_HALF + PIN_GAP + PIN_HEIGHT;
+  CENTER_Y + CENTER_BTN_OFFSET + CENTER_BTN_HALF;
 
 function createMaterialIcon(name: string): HTMLSpanElement {
   const icon = document.createElement("span");
@@ -87,11 +85,7 @@ export function createPlacementDialogElement({
   centerButton.append(createMaterialIcon("close"));
   centerButton.addEventListener("click", onCancel);
 
-  const pin = document.createElement("div");
-  pin.className = "placement-dialog__pin";
-  pin.setAttribute("aria-hidden", "true");
-
-  root.append(arc, centerButton, pin);
+  root.append(arc, centerButton);
 
   return root;
 }

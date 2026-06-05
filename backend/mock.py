@@ -61,8 +61,8 @@ class MockBackend(Backend):
                 {"station": stations[2], "visit_day": DayOfWeek.FRIDAY},
             ],
             "weekly_distance": self.estimate_distance(home, locations),
-            "fuel_price": 1.45,
-            "electricity_price": 0.28,
+            "fuel_price": 1045,
+            "electricity_price": 285,
             "extra_walk_time": 12,
         }
 

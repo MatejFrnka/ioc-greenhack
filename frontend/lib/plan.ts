@@ -113,3 +113,19 @@ export function formatVisitDay(day: DayOfWeek | null): string {
 export function chargingStationKey(station: ChargingStation, index: number): string {
   return `${station.lat},${station.long},${station.charger_kilowatts},${index}`;
 }
+
+export function totalWeeklyKm(
+  weeklyDistance: Record<DayOfWeek, number>
+): number {
+  return Object.values(weeklyDistance).reduce((sum, distance) => sum + distance, 0);
+}
+
+const czkFormatter = new Intl.NumberFormat("cs-CZ", {
+  style: "currency",
+  currency: "CZK",
+  maximumFractionDigits: 0,
+});
+
+export function formatWeeklyCzk(amount: number): string {
+  return `${czkFormatter.format(amount)}/week`;
+}
