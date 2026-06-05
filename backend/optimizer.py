@@ -173,6 +173,29 @@ def infeasible_reason(backend, home, locations, capacity):
             "only at the stops.")
 
 
+def end_of_week_charge(backend, home, locations, capacity, weekly_kwh):
+    """Recommend a single charge for a week so light the car never had to charge.
+
+    Picks the best reachable station, preferring home (charge on Sunday night),
+    and tops the battery back toward full. Returns a 'charge' action, or None if
+    no station is reachable anywhere.
+    """
+    end_day = list(DayOfWeek)[-1]            # Sunday = end of the week
+    candidates = [(home, "Home")] + [(loc, f"Stop {i + 1}")
+                                     for i, loc in enumerate(locations)]
+    for point, label in candidates:
+        stations = backend.best_charging_stations(point)
+        if not stations:
+            continue
+        s = stations[0]                      # best by the backend's ordering
+        fill = min(weekly_kwh, s.charger_kilowatts * point.time_spent / 60.0, capacity)
+        money = fill * price_per_kwh(s.charger_kilowatts)
+        return ("charge", end_day, label,
+                f"{s.charger_type.name}{s.charger_kilowatts}kW", fill,
+                fill / s.charger_kilowatts * 60.0, s.distance_to_location, money, s)
+    return None
+
+
 def optimize(backend, home=None, locations=None, care=COST_CARE):
     """Run the full pipeline.
 
@@ -199,6 +222,14 @@ def optimize(backend, home=None, locations=None, care=COST_CARE):
     plan = solve(events, capacity, floor_kwh, end_kwh, float(care))
     reason = None if plan is not None else infeasible_reason(
         backend, home, locations, capacity)
+
+    # Light week: the car never had to charge -> still recommend one charge at week's end.
+    if plan is not None and not any(a[0] == "charge" for a in plan["actions"]):
+        extra = end_of_week_charge(backend, home, locations, capacity, weekly_kwh)
+        if extra is not None:
+            plan["actions"].append(extra)
+            plan["sessions"] = 1
+
     return plan, capacity, weekly_km, weekly_kwh, distances, reason
 
 

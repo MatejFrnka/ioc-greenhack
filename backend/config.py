@@ -34,7 +34,10 @@ COST_CARE = 3                   # how much the user cares about money, 1..5
 # --- solver accuracy ---
 SOC_STEP_KWH = 1.0              # DP granularity: smaller = more accurate, slower
 
-# --- response passthrough (shown by the frontend, not used by the solver) ---
-FUEL_PRICE = 1.45               # EUR per litre (for the petrol comparison)
-ELECTRICITY_PRICE = 0.28        # EUR per kWh
-EXTRA_WALK_TIME = 12            # minutes
+# --- weekly cost comparison: EV electricity vs an equivalent petrol car (CZK) ---
+# The frontend shows the WEEKLY cost (CZK) for each; app.py multiplies these unit
+# prices by the week's energy / distance.
+ELECTRICITY_PRICE_CZK_PER_KWH = 7.0    # what a kWh costs (home/mixed charging)
+FUEL_PRICE_CZK_PER_L = 38.0            # petrol price per litre
+PETROL_L_PER_100KM = 7.0               # consumption of the petrol car we compare against
+EXTRA_WALK_TIME = 12                   # minutes (shown by the frontend)
