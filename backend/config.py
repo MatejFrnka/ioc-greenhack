@@ -28,3 +28,8 @@ COST_CARE = 3                   # how much the user cares about money, 1..5
 
 # --- solver accuracy ---
 SOC_STEP_KWH = 1.0              # DP granularity: smaller = more accurate, slower
+
+# --- response passthrough (shown by the frontend, not used by the solver) ---
+FUEL_PRICE = 1.45               # EUR per litre (for the petrol comparison)
+ELECTRICITY_PRICE = 0.28        # EUR per kWh
+EXTRA_WALK_TIME = 12            # minutes

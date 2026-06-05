@@ -139,7 +139,10 @@ def solve(events, capacity, floor_kwh, care):
 
 
 def optimize(backend, home=None, locations=None, care=COST_CARE):
-    """Run the full pipeline; returns (plan, capacity, weekly_km, weekly_kwh).
+    """Run the full pipeline.
+
+    Returns (plan, capacity, weekly_km, weekly_kwh, distances) where `distances`
+    is the per-day {DayOfWeek: km} the API exposes as weekly_distance.
 
     home/locations default to the backend's own data (handy for the CLI); the
     API passes the user's placed points instead.
@@ -157,7 +160,7 @@ def optimize(backend, home=None, locations=None, care=COST_CARE):
 
     events = build_events(backend, home, locations, distances)
     plan = solve(events, capacity, floor_kwh, float(care))
-    return plan, capacity, weekly_km, weekly_kwh
+    return plan, capacity, weekly_km, weekly_kwh, distances
 
 
 def chosen_charging_stations(plan):
@@ -178,6 +181,7 @@ def chosen_charging_stations(plan):
             "distance_to_location": source.distance_to_location,
             "visit_day": day.name,
         })
+    print(stations)
     return stations
 
 
