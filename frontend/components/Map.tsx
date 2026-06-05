@@ -410,6 +410,8 @@ export default function Map({
     setScheduleDraft(null);
     placementPopupRef.current?.remove();
     placementPopupRef.current = null;
+    pointActionPopupRef.current?.remove();
+    pointActionPopupRef.current = null;
   }, [sidebarView]);
 
   useEffect(() => {
@@ -439,6 +441,7 @@ export default function Map({
       const marker = new maplibregl.Marker({
         element: createMarkerElement(point.type, (event) => {
           event.stopPropagation();
+          if (sidebarViewRef.current === "analysis") return;
           openPointActionPopupRef.current(point);
         }),
         anchor: "center",
