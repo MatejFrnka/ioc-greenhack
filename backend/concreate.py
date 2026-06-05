@@ -124,7 +124,7 @@ class ConcreateBackend(Backend):
 
         coords = googlemaps.convert.decode_polyline(route['polyline'])
         return {
-            'distance': route['distance_m'],
+            'distance': route['distance_m'] / 1000.0,
             'travel_time': route['travel_time_s'],
             'path': coords
         }
@@ -134,7 +134,7 @@ class ConcreateBackend(Backend):
 
         coords = googlemaps.convert.decode_polyline(route['polyline'])
         return {
-            'distance': route['distance_m'],
+            'distance': route['distance_m'] / 1000.0,
             'travel_time': route['travel_time_s'],
             'path': coords
         }
@@ -201,7 +201,7 @@ class ConcreateBackend(Backend):
         p2 = gpd.GeoSeries([shapely.Point(lon2, lat2)], crs="EPSG:4326")
 
         meters = p1.to_crs(3857).distance(p2.to_crs(3857)).iloc[0]
-        return meters
+        return meters / 1000.0
 
     def _charger_type(self, text: str) -> ChargerType:
         text = text.lower().strip()
