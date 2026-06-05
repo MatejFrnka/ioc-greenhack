@@ -85,7 +85,7 @@ export function pointsToPlanRequest(points: MapPoint[]): PlanRequest | null {
   };
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5003";
 
 export async function fetchPlan(
   request: PlanRequest,
