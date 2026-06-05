@@ -1,5 +1,5 @@
 from .backend import Backend
-from .location import Location, DayOfWeek, ChargingStation
+from .location import Location, DayOfWeek, ChargingStation, ChargerType
 
 
 class MockBackend(Backend):
@@ -8,20 +8,23 @@ class MockBackend(Backend):
             ChargingStation(
                 lat=50.0812,
                 long=14.4205,
-                charger_type="DC Fast 150kW",
-                cost_value=0.39,
+                charger_type=ChargerType.DC,
+                charger_kilowatts=150,
+                distance_to_location=0.4,
             ),
             ChargingStation(
                 lat=50.0895,
                 long=14.4170,
-                charger_type="DC Fast 50kW",
-                cost_value=0.31,
+                charger_type=ChargerType.DC,
+                charger_kilowatts=50,
+                distance_to_location=1.0,
             ),
             ChargingStation(
                 lat=50.0701,
                 long=14.4503,
-                charger_type="AC Type 2 22kW",
-                cost_value=0.22,
+                charger_type=ChargerType.AC,
+                charger_kilowatts=22,
+                distance_to_location=2.5,
             ),
         ]
 
