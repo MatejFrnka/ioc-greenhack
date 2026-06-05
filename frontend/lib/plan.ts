@@ -28,7 +28,7 @@ export interface ChargingStation {
 export interface PlanResponse {
   charging_stations: ChargingStation[];
   weekly_distance: Record<DayOfWeek, number>;
-  daily_remaining_kwh: Record<DayOfWeek, number>;
+  daily_peak_kwh: Record<DayOfWeek, number>;
   fuel_price: number;
   electricity_price: number;
   extra_walk_time: number;

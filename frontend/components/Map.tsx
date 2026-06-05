@@ -59,21 +59,26 @@ function createMarkerElement(
 
 function createChargingMarkerElement(station: ChargingStation): HTMLDivElement {
   const isDc = station.charger_type === "DC";
+  // Outer element is positioned by MapLibre; the inner badge is what we scale.
   const el = document.createElement("div");
-  el.className =
-    "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md";
-  el.style.backgroundColor = isDc ? "#16a34a" : "#ca8a04";
-  el.style.color = "#ffffff";
+  el.className = "charging-marker";
   el.title = `${station.charger_kilowatts}kW ${
     station.charger_type
   } · ${formatVisitDay(
     station.visit_day
   )} · ${station.distance_to_location.toFixed(1)} km`;
 
+  const badge = document.createElement("div");
+  badge.className =
+    "charging-marker__badge flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md";
+  badge.style.backgroundColor = isDc ? "#16a34a" : "#ca8a04";
+  badge.style.color = "#ffffff";
+
   const iconEl = document.createElement("span");
   iconEl.className = "material-icons text-[16px] leading-none";
   iconEl.textContent = "ev_station";
-  el.append(iconEl);
+  badge.append(iconEl);
+  el.append(badge);
 
   return el;
 }
@@ -115,8 +120,35 @@ export default function Map({
     (id: string, visits: DayOfWeek[], timeSpentMinutes: number) => void
   >(() => {});
   const removePointRef = useRef<(id: string) => void>(() => {});
+  const [highlightedChargingKey, setHighlightedChargingKey] = useState<
+    string | null
+  >(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chargingStations = plan?.charging_stations ?? [];
+
+  // Hovering a charging session in the list highlights its marker; it lingers
+  // briefly after the pointer leaves so the pulse is noticeable.
+  const handleHoverChargingStation = useCallback((key: string | null) => {
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = null;
+    }
+    if (key) {
+      setHighlightedChargingKey(key);
+    } else {
+      highlightTimerRef.current = setTimeout(
+        () => setHighlightedChargingKey(null),
+        1200
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
 
   placementStageRef.current = placementStage;
   sidebarViewRef.current = sidebarView;
@@ -475,6 +507,15 @@ export default function Map({
     });
   }, [chargingStations]);
 
+  useEffect(() => {
+    for (const [id, marker] of chargingMarkersRef.current.entries()) {
+      const el = marker.getElement();
+      const active = id === highlightedChargingKey;
+      el.classList.toggle("charging-marker--active", active);
+      el.style.zIndex = active ? "10" : "";
+    }
+  }, [highlightedChargingKey, chargingStations]);
+
   return (
     <div className="flex h-full w-full bg-zinc-100">
       <Sidebar
@@ -488,6 +529,7 @@ export default function Map({
         onPlaceSelect={handlePlaceSelect}
         onNavigate={navigateToPoint}
         onDelete={removePoint}
+        onHoverChargingStation={handleHoverChargingStation}
       />
       <div
         className="relative min-w-0 flex-1 p-5"

@@ -257,30 +257,30 @@ def chosen_charging_stations(plan):
     return stations
 
 
-def daily_remaining_kwh(plan, capacity):
-    """Battery left (kWh) at the END of each day, replaying the plan from full.
+def daily_peak_kwh(plan, capacity):
+    """Highest battery level (kWh) reached on each day, replaying the plan from full.
 
-    Drives subtract, charges add; days with no events carry the previous level
-    forward. Returns {DayOfWeek: kWh} for the whole week.
+    The level carried into a day counts too, so a quiet day's peak is just the
+    level it started with. Returns {DayOfWeek: kWh} for the whole week.
     """
     if plan is None:
         return {}
-    end_of_day = {}
-    soc = capacity                       # the week starts at a full battery
-    for a in plan["actions"]:
-        if a[0] == "drive":
-            soc -= a[2]
-        elif a[0] == "charge":
-            soc += a[4]
-        else:
-            continue                     # 'idle' parks don't change the level
-        end_of_day[a[1]] = soc           # last write of a day = its end-of-day level
+    by_day = {d: [] for d in DayOfWeek}
+    for a in plan["actions"]:                # actions are already chronological
+        if a[0] in ("drive", "charge"):
+            by_day[a[1]].append(a)
 
-    remaining, prev = {}, capacity
+    peak, soc = {}, capacity                 # the week starts at a full battery
     for d in DayOfWeek:
-        prev = end_of_day.get(d, prev)
-        remaining[d] = round(prev, 1)
-    return remaining
+        day_peak = soc                       # the level carried into the day
+        for a in by_day[d]:
+            if a[0] == "drive":
+                soc -= a[2]
+            else:
+                soc = min(soc + a[4], capacity)   # can't charge past 100%
+            day_peak = max(day_peak, soc)
+        peak[d] = round(day_peak, 1)
+    return peak
 
 
 def report(plan, capacity, weekly_km, weekly_kwh):

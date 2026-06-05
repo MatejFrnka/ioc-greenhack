@@ -18,6 +18,7 @@ interface SidebarProps {
   onPlaceSelect: (place: SelectedPlace) => void;
   onNavigate: (point: MapPoint) => void;
   onDelete: (id: string) => void;
+  onHoverChargingStation: (key: string | null) => void;
 }
 
 export default function Sidebar({
@@ -31,6 +32,7 @@ export default function Sidebar({
   onPlaceSelect,
   onNavigate,
   onDelete,
+  onHoverChargingStation,
 }: SidebarProps) {
   const hasHome = points.some((point) => point.type === "home");
 
@@ -55,6 +57,7 @@ export default function Sidebar({
             plan={plan}
             planLoading={planLoading}
             planError={planError}
+            onHoverChargingStation={onHoverChargingStation}
           />
         )}
       </div>
