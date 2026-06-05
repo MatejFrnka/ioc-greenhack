@@ -74,7 +74,7 @@ export const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
 export const DEFAULT_TIME_SPENT_MINUTES: Record<PointType, number> = {
   home: 720,
   work: 480,
-  school: 360,
+  school: 30,
   shopping_cart: 60,
   question_mark: 120,
 };

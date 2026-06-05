@@ -29,7 +29,7 @@ function PlaceRow({
         className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left"
       >
         <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white shadow-sm"
+          className="flex shrink-0 items-center justify-center rounded-full border-2 border-white p-1.5 shadow-sm"
           style={{ backgroundColor: color, color: foreground }}
         >
           <span className="material-icons text-[15px] leading-none">

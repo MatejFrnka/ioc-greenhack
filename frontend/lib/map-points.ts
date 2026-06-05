@@ -53,7 +53,7 @@ export const POINT_TYPE_CONFIG: Record<
     icon: "school",
     label: "School",
     color: PALETTE.coral,
-    foreground: "#3e363f",
+    foreground: "#ffffff",
   },
   shopping_cart: {
     icon: "shopping_cart",

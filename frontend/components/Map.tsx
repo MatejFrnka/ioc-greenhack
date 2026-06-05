@@ -23,7 +23,10 @@ import { createPlacementDialogElement } from "@/components/PlacementDialog";
 import { createPointActionDialogElement } from "@/components/PointActionDialog";
 import { type SelectedPlace } from "@/components/PlacesSearchBar";
 import ScheduleDialog from "@/components/ScheduleDialog";
-import Sidebar, { type PlacementStage } from "@/components/Sidebar";
+import Sidebar, {
+  type PlacementStage,
+  type SidebarView,
+} from "@/components/Sidebar";
 
 interface ScheduleDraft {
   lng: number;
@@ -46,7 +49,7 @@ function createMarkerElement(
   const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
   const el = document.createElement("div");
   el.className =
-    "flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white shadow-md";
+    "flex cursor-pointer items-center justify-center rounded-full border-2 border-white p-2.5 shadow-md";
   el.style.backgroundColor = color;
   el.style.color = foreground;
   el.title = label;
@@ -94,6 +97,7 @@ export default function Map({
     () => {}
   );
   const placementStageRef = useRef<PlacementStage>("home");
+  const sidebarViewRef = useRef<SidebarView>("setup");
   const addHomePointRef = useRef<(lng: number, lat: number) => void>(() => {});
   const markersRef = useRef(new globalThis.Map<string, maplibregl.Marker>());
   const chargingMarkersRef = useRef(
@@ -102,6 +106,7 @@ export default function Map({
   const initialViewRef = useRef({ center, zoom });
 
   const [points, setPoints] = useState<MapPoint[]>([]);
+  const [sidebarView, setSidebarView] = useState<SidebarView>("setup");
   const [placementStage, setPlacementStage] = useState<PlacementStage>("home");
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
@@ -119,6 +124,7 @@ export default function Map({
   const chargingStations = plan?.charging_stations ?? [];
 
   placementStageRef.current = placementStage;
+  sidebarViewRef.current = sidebarView;
 
   const addHomePoint = useCallback((lng: number, lat: number) => {
     setPoints((current) => {
@@ -219,6 +225,8 @@ export default function Map({
 
   const handlePlaceSelect = useCallback(
     (place: SelectedPlace) => {
+      if (sidebarViewRef.current === "analysis") return;
+
       const map = mapRef.current;
       if (!map) return;
 
@@ -326,6 +334,8 @@ export default function Map({
 
     map.on("click", (event) => {
       setScheduleDraft(null);
+      if (sidebarViewRef.current === "analysis") return;
+
       if (placementStageRef.current === "home") {
         addHomePointRef.current(event.lngLat.lng, event.lngLat.lat);
       } else {
@@ -393,6 +403,14 @@ export default function Map({
     setPlanError(null);
     setPlanLoading(false);
   }, [points]);
+
+  useEffect(() => {
+    if (sidebarView !== "analysis") return;
+
+    setScheduleDraft(null);
+    placementPopupRef.current?.remove();
+    placementPopupRef.current = null;
+  }, [sidebarView]);
 
   useEffect(() => {
     return () => planAbortRef.current?.abort();
@@ -471,6 +489,8 @@ export default function Map({
   return (
     <div className="flex h-full w-full bg-zinc-100">
       <Sidebar
+        view={sidebarView}
+        onViewChange={setSidebarView}
         points={points}
         plan={plan}
         planLoading={planLoading}

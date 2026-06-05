@@ -1,6 +1,3 @@
-"use client";
-
-import { useState } from "react";
 import { type SelectedPlace } from "@/components/PlacesSearchBar";
 import SidebarAnalysis from "@/components/SidebarAnalysis";
 import SidebarSetup from "@/components/SidebarSetup";
@@ -11,6 +8,8 @@ export type PlacementStage = "home" | "locations";
 export type SidebarView = "setup" | "analysis";
 
 interface SidebarProps {
+  view: SidebarView;
+  onViewChange: (view: SidebarView) => void;
   points: MapPoint[];
   plan: PlanResponse | null;
   planLoading: boolean;
@@ -22,6 +21,8 @@ interface SidebarProps {
 }
 
 export default function Sidebar({
+  view,
+  onViewChange,
   points,
   plan,
   planLoading,
@@ -31,7 +32,6 @@ export default function Sidebar({
   onNavigate,
   onDelete,
 }: SidebarProps) {
-  const [view, setView] = useState<SidebarView>("setup");
   const hasHome = points.some((point) => point.type === "home");
 
   return (
@@ -66,7 +66,7 @@ export default function Sidebar({
             disabled={!hasHome}
             onClick={() => {
               onAnalyze();
-              setView("analysis");
+              onViewChange("analysis");
             }}
             className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-zinc-900 transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -75,7 +75,7 @@ export default function Sidebar({
         ) : (
           <button
             type="button"
-            onClick={() => setView("setup")}
+            onClick={() => onViewChange("setup")}
             className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3.5 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-50"
           >
             Back to setup
