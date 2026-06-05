@@ -25,7 +25,7 @@ class MockBackend(Backend):
             ),
         ]
 
-    def estimate_distance(self, locations: list[Location]) -> dict[DayOfWeek, float]:
+    def estimate_distance(self, home: Location, locations: list[Location]) -> dict[DayOfWeek, float]:
         base = {
             DayOfWeek.MONDAY: 10.0,
             DayOfWeek.TUESDAY: 12.5,

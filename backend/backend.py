@@ -8,5 +8,5 @@ class Backend(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def estimate_distance(self, locations: list[Location]) -> dict[DayOfWeek, float]:
+    def estimate_distance(self, home: Location, locations: list[Location]) -> dict[DayOfWeek, float]:
         pass
