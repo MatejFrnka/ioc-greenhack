@@ -53,9 +53,10 @@ class ConcreateBackend(Backend):
         return chargers
 
     def estimate_distance(self, home: Location, locations: list[Location]) -> dict[DayOfWeek, float]:
-        dists = {d.value: 0.0 for d in DayOfWeek}
+        dists = {d: 0.0 for d in DayOfWeek}
 
         for loc in locations:
+            # round trip home <-> location, in km
             dist = self._air_distance(home.lat, home.long, loc.lat, loc.long) * 2.0
 
             for d in loc.visits:
@@ -128,7 +129,8 @@ class ConcreateBackend(Backend):
         p1 = gpd.GeoSeries([shapely.Point(lon1, lat1)], crs="EPSG:4326")
         p2 = gpd.GeoSeries([shapely.Point(lon2, lat2)], crs="EPSG:4326")
 
-        return p1.to_crs(3857).distance(p2.to_crs(3857)).iloc[0]
+        meters = p1.to_crs(3857).distance(p2.to_crs(3857)).iloc[0]
+        return meters / 1000.0  # km (the optimizer works in km)
 
     def _charger_type(self, text: str) -> ChargerType:
         text = text.lower().strip()
