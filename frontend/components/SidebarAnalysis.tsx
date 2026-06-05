@@ -1,6 +1,7 @@
 import BatteryChart from "@/components/BatteryChart";
 import CostBarChart from "@/components/CostBarChart";
 import {
+  BATTERY_CAPACITY_OPTIONS,
   chargingStationKey,
   formatVisitDay,
   totalWeeklyKm,
@@ -11,6 +12,8 @@ interface SidebarAnalysisProps {
   plan: PlanResponse | null;
   planLoading: boolean;
   planError: string | null;
+  batteryCapacity: number;
+  onBatteryCapacityChange: (kwh: number) => void;
   onHoverChargingStation: (key: string | null) => void;
 }
 
@@ -40,6 +43,8 @@ export default function SidebarAnalysis({
   plan,
   planLoading,
   planError,
+  batteryCapacity,
+  onBatteryCapacityChange,
   onHoverChargingStation,
 }: SidebarAnalysisProps) {
   return (
@@ -49,6 +54,34 @@ export default function SidebarAnalysis({
         <p className="mt-1.5 text-sm text-zinc-500">
           Your weekly EV charging plan based on your locations.
         </p>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-xs font-medium text-zinc-500">
+          Battery capacity
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {BATTERY_CAPACITY_OPTIONS.map((option) => {
+            const isActive = batteryCapacity === option.kwh;
+            return (
+              <button
+                key={option.kwh}
+                type="button"
+                disabled={planLoading}
+                onClick={() => onBatteryCapacityChange(option.kwh)}
+                aria-pressed={isActive}
+                className={`flex flex-col items-center rounded-xl border px-2 py-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isActive
+                    ? "border-primary bg-primary/10 text-zinc-900"
+                    : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
+                <span className="text-sm font-semibold">{option.label}</span>
+                <span className="text-xs text-zinc-500">{option.kwh} kWh</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {planLoading && (

@@ -20,10 +20,11 @@ import {
   fetchPlan,
   fetchStations,
   formatVisitDay,
+  planForBatteryCapacity,
   pointsToPlanRequest,
   type ChargingStation,
   type PathFromHome,
-  type PlanResponse,
+  type PlanResponseByCapacity,
   type StationCoordinate,
 } from "@/lib/plan";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
@@ -349,7 +350,7 @@ export default function Map({
   const [sidebarView, setSidebarView] = useState<SidebarView>("setup");
   const [placementStage, setPlacementStage] = useState<PlacementStage>("home");
   const [allStations, setAllStations] = useState<StationCoordinate[]>([]);
-  const [plan, setPlan] = useState<PlanResponse | null>(null);
+  const [plans, setPlans] = useState<PlanResponseByCapacity | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const planAbortRef = useRef<AbortController | null>(null);
@@ -367,6 +368,8 @@ export default function Map({
   const [batteryCapacity, setBatteryCapacity] =
     useState<number>(DEFAULT_BATTERY_KWH);
 
+  const plan =
+    plans !== null ? planForBatteryCapacity(plans, batteryCapacity) : null;
   const chargingStations = plan?.charging_stations ?? [];
   const pathsFromHome = plan?.paths_from_home ?? [];
   const pathsFromStations = plan?.paths_from_stations ?? [];
@@ -744,9 +747,9 @@ export default function Map({
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
 
-    const request = pointsToPlanRequest(points, batteryCapacity);
+    const request = pointsToPlanRequest(points);
     if (!request) {
-      setPlan(null);
+      setPlans(null);
       setPlanError(null);
       setPlanLoading(false);
       return;
@@ -759,11 +762,11 @@ export default function Map({
 
     fetchPlan(request, controller.signal)
       .then((response) => {
-        setPlan(response);
+        setPlans(response);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setPlan(null);
+        setPlans(null);
         setPlanError(
           error instanceof Error ? error.message : "Failed to load plan"
         );
@@ -773,11 +776,11 @@ export default function Map({
           setPlanLoading(false);
         }
       });
-  }, [points, batteryCapacity]);
+  }, [points]);
 
   useEffect(() => {
     planAbortRef.current?.abort();
-    setPlan(null);
+    setPlans(null);
     setPlanError(null);
     setPlanLoading(false);
   }, [points]);

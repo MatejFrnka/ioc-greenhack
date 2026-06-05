@@ -12,7 +12,6 @@ export interface PlanLocation {
 export interface PlanRequest {
   home: PlanLocation;
   locations: PlanLocation[];
-  battery_kwh: number;
 }
 
 export const BATTERY_CAPACITY_OPTIONS = [
@@ -22,6 +21,9 @@ export const BATTERY_CAPACITY_OPTIONS = [
 ] as const;
 
 export const DEFAULT_BATTERY_KWH = 60;
+
+export type BatteryCapacityKwh =
+  (typeof BATTERY_CAPACITY_OPTIONS)[number]["kwh"];
 
 export interface ChargingStation {
   lat: number;
@@ -57,6 +59,12 @@ export interface PlanResponse {
   feasible?: boolean;
   reason?: string | null;
 }
+
+/** `/api/plan` returns one scenario per battery size (keys `"40"`, `"60"`, `"80"`). */
+export type PlanResponseByCapacity = Record<
+  `${BatteryCapacityKwh}`,
+  PlanResponse
+>;
 
 export const ALL_DAYS: DayOfWeek[] = [
   "MONDAY",
@@ -117,10 +125,7 @@ function pointToLocation(point: MapPoint): PlanLocation {
   };
 }
 
-export function pointsToPlanRequest(
-  points: MapPoint[],
-  batteryKwh: number
-): PlanRequest | null {
+export function pointsToPlanRequest(points: MapPoint[]): PlanRequest | null {
   const homePoint = points.find((point) => point.type === "home");
   if (!homePoint) return null;
 
@@ -129,8 +134,14 @@ export function pointsToPlanRequest(
     locations: points
       .filter((point) => point.type !== "home")
       .map(pointToLocation),
-    battery_kwh: batteryKwh,
   };
+}
+
+export function planForBatteryCapacity(
+  plans: PlanResponseByCapacity,
+  kwh: number
+): PlanResponse | null {
+  return plans[String(kwh) as `${BatteryCapacityKwh}`] ?? null;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5003";
@@ -144,7 +155,7 @@ export type StationCoordinate = [number, number];
 export async function fetchPlan(
   request: PlanRequest,
   signal?: AbortSignal
-): Promise<PlanResponse> {
+): Promise<PlanResponseByCapacity> {
   const response = await fetch(`${API_BASE}/api/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -156,7 +167,7 @@ export async function fetchPlan(
     throw new Error(`Plan request failed (${response.status})`);
   }
 
-  return response.json() as Promise<PlanResponse>;
+  return response.json() as Promise<PlanResponseByCapacity>;
 }
 
 export async function fetchStations(
