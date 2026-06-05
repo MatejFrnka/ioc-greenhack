@@ -49,5 +49,10 @@ def plan():
     })
 
 
+@app.get("/api/stations")
+def stations():
+    return backend.charging_stations()
+
+
 if __name__ == "__main__":
     app.run(port=5003, debug=True)
