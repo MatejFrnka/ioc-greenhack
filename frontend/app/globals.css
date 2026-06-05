@@ -34,3 +34,106 @@ body {
 .placement-popup .maplibregl-popup-tip {
   display: none;
 }
+
+.placement-dialog {
+  position: relative;
+  pointer-events: auto;
+}
+
+.placement-dialog__arc {
+  position: absolute;
+  inset: 0;
+}
+
+.placement-dialog__icon-btn,
+.placement-dialog__center-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.placement-dialog__icon-btn {
+  width: 3rem;
+  height: 3rem;
+  aspect-ratio: 1;
+  padding: 0.75rem;
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgb(0 0 0 / 0.18);
+}
+
+.placement-dialog__icon-btn:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.22);
+}
+
+.placement-dialog__center-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  aspect-ratio: 1;
+  padding: 0.625rem;
+  border-radius: 50%;
+  background: #3e363f;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+.placement-dialog__center-btn:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+  background: #297373;
+}
+
+.placement-dialog__icon-glyph {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.placement-dialog__center-btn .placement-dialog__icon-glyph {
+  font-size: 1.125rem;
+}
+
+.placement-dialog__pin {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 14px;
+  height: 18px;
+  transform: translateX(-50%);
+  background: #ffffff;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.15));
+}
+
+.pac-container {
+  z-index: 20;
+  border-radius: 0.75rem;
+  margin-top: 0.25rem;
+  border: 1px solid #e4e4e7;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.pac-container.pac-logo::after {
+  display: none !important;
+  background: none !important;
+  height: 0 !important;
+  content: none !important;
+}
+
+.pac-icon {
+  display: none !important;
+}
+
+.pac-item {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.pac-item:hover {
+  background-color: #f4f4f5;
+}

@@ -1,20 +1,59 @@
-import type { PointType } from "@/lib/map-points";
+import {
+	PLACEMENT_POINT_TYPES,
+	POINT_TYPE_CONFIG,
+	type PointType,
+} from "@/lib/map-points";
 
 interface PlacementDialogHandlers {
 	onSelect: (type: PointType) => void;
 	onCancel: () => void;
 }
 
-function createButton(
-	label: string,
-	className: string,
-	onClick: () => void,
+const ICON_SIZE = 48;
+const ICON_HALF = ICON_SIZE / 2;
+const CENTER_BTN_SIZE = 40;
+const CENTER_BTN_HALF = CENTER_BTN_SIZE / 2;
+const ARC_RADIUS = 84;
+const ARC_SPAN = (115 * Math.PI) / 180;
+const ARC_CENTER_ANGLE = Math.PI / 2;
+const ARC_START = ARC_CENTER_ANGLE + ARC_SPAN / 2;
+const CENTER_DOWN_OFFSET = 40;
+const CENTER_BTN_OFFSET = 22;
+const PIN_HEIGHT = 18;
+const PIN_GAP = 6;
+const EDGE_PAD = 10;
+
+const ARC_HALF_WIDTH = ARC_RADIUS * Math.sin(ARC_SPAN / 2);
+const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF + EDGE_PAD);
+const CENTER_X = DIALOG_WIDTH / 2;
+const CENTER_Y = ARC_RADIUS + ICON_HALF + EDGE_PAD + CENTER_DOWN_OFFSET;
+const DIALOG_HEIGHT =
+	CENTER_Y + CENTER_BTN_OFFSET + CENTER_BTN_HALF + PIN_GAP + PIN_HEIGHT;
+
+function createMaterialIcon(name: string): HTMLSpanElement {
+	const icon = document.createElement("span");
+	icon.className = "material-icons placement-dialog__icon-glyph";
+	icon.textContent = name;
+	return icon;
+}
+
+function createIconButton(
+	type: PointType,
+	x: number,
+	y: number,
+	onSelect: (type: PointType) => void,
 ): HTMLButtonElement {
+	const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
 	const button = document.createElement("button");
 	button.type = "button";
-	button.textContent = label;
-	button.className = className;
-	button.addEventListener("click", onClick);
+	button.className = "placement-dialog__icon-btn";
+	button.title = label;
+	button.style.left = `${x}px`;
+	button.style.top = `${y}px`;
+	button.style.backgroundColor = color;
+	button.style.color = foreground;
+	button.append(createMaterialIcon(icon));
+	button.addEventListener("click", () => onSelect(type));
 	return button;
 }
 
@@ -23,36 +62,36 @@ export function createPlacementDialogElement({
 	onCancel,
 }: PlacementDialogHandlers): HTMLElement {
 	const root = document.createElement("div");
-	root.className =
-		"w-44 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg";
+	root.className = "placement-dialog";
+	root.style.width = `${DIALOG_WIDTH}px`;
+	root.style.height = `${DIALOG_HEIGHT}px`;
 
-	const title = document.createElement("p");
-	title.textContent = "Place marker";
-	title.className = "mb-2 text-xs font-medium text-zinc-500";
+	const arc = document.createElement("div");
+	arc.className = "placement-dialog__arc";
 
-	const actions = document.createElement("div");
-	actions.className = "flex gap-2";
+	const count = PLACEMENT_POINT_TYPES.length;
+	for (let i = 0; i < count; i++) {
+		const type = PLACEMENT_POINT_TYPES[i];
+		const angle = ARC_START - (i * ARC_SPAN) / (count - 1);
+		const x = CENTER_X + ARC_RADIUS * Math.cos(angle);
+		const y = CENTER_Y - ARC_RADIUS * Math.sin(angle);
+		arc.append(createIconButton(type, x, y, onSelect));
+	}
 
-	const workButton = createButton(
-		"Work",
-		"flex-1 rounded-md bg-zinc-900 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-700",
-		() => onSelect("work"),
-	);
+	const centerButton = document.createElement("button");
+	centerButton.type = "button";
+	centerButton.className = "placement-dialog__center-btn";
+	centerButton.title = "Cancel";
+	centerButton.style.left = `${CENTER_X}px`;
+	centerButton.style.top = `${CENTER_Y + CENTER_BTN_OFFSET}px`;
+	centerButton.append(createMaterialIcon("close"));
+	centerButton.addEventListener("click", onCancel);
 
-	const homeButton = createButton(
-		"Home",
-		"flex-1 rounded-md border border-zinc-300 px-2 py-1.5 text-xs font-medium text-zinc-800 transition-colors hover:bg-zinc-100",
-		() => onSelect("home"),
-	);
+	const pin = document.createElement("div");
+	pin.className = "placement-dialog__pin";
+	pin.setAttribute("aria-hidden", "true");
 
-	const cancelButton = createButton(
-		"Cancel",
-		"mt-2 w-full text-center text-xs text-zinc-400 transition-colors hover:text-zinc-600",
-		onCancel,
-	);
-
-	actions.append(workButton, homeButton);
-	root.append(title, actions, cancelButton);
+	root.append(arc, centerButton, pin);
 
 	return root;
 }

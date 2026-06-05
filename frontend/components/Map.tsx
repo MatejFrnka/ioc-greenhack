@@ -1,164 +1,210 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { getMapStyle } from "@/lib/map-style";
-import type { MapPoint, PointType } from "@/lib/map-points";
+import {
+  POINT_TYPE_CONFIG,
+  type MapPoint,
+  type PointType,
+} from "@/lib/map-points";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
+import PlacesSearchBar, {
+  type SelectedPlace,
+} from "@/components/PlacesSearchBar";
 
 interface MapProps {
-	center?: [number, number];
-	zoom?: number;
+  center?: [number, number];
+  zoom?: number;
 }
 
 const DEFAULT_CENTER: [number, number] = [14.4378, 50.0755];
 const DEFAULT_ZOOM = 11;
 
 function createMarkerElement(type: PointType): HTMLDivElement {
-	const el = document.createElement("div");
-	el.className =
-		"flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[11px] font-semibold text-white shadow-md";
-	el.style.backgroundColor = type === "work" ? "#18181b" : "#71717a";
-	el.textContent = type === "work" ? "W" : "H";
-	el.title = type === "work" ? "Work" : "Home";
-	return el;
+  const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
+  const el = document.createElement("div");
+  el.className =
+    "flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md";
+  el.style.backgroundColor = color;
+  el.style.color = foreground;
+  el.title = label;
+
+  const iconEl = document.createElement("span");
+  iconEl.className = "material-icons text-[15px] leading-none";
+  iconEl.textContent = icon;
+  el.append(iconEl);
+
+  return el;
+}
+
+function createSearchMarkerElement(name: string): HTMLDivElement {
+  const el = document.createElement("div");
+  el.className =
+    "h-4 w-4 rounded-full border-2 border-white bg-blue-600 shadow-md";
+  el.title = name;
+  return el;
 }
 
 export default function Map({
-	center = DEFAULT_CENTER,
-	zoom = DEFAULT_ZOOM,
+  center = DEFAULT_CENTER,
+  zoom = DEFAULT_ZOOM,
 }: MapProps) {
-	const containerRef = useRef<HTMLDivElement>(null);
-	const mapRef = useRef<maplibregl.Map | null>(null);
-	const placementPopupRef = useRef<maplibregl.Popup | null>(null);
-	const markersRef = useRef(
-		new globalThis.Map<string, maplibregl.Marker>(),
-	);
-	const initialViewRef = useRef({ center, zoom });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const placementPopupRef = useRef<maplibregl.Popup | null>(null);
+  const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const markersRef = useRef(new globalThis.Map<string, maplibregl.Marker>());
+  const initialViewRef = useRef({ center, zoom });
 
-	const [points, setPoints] = useState<MapPoint[]>([]);
+  const [points, setPoints] = useState<MapPoint[]>([]);
 
-	useEffect(() => {
-		const container = containerRef.current;
-		if (!container) return;
+  const handlePlaceSelect = useCallback((place: SelectedPlace) => {
+    const map = mapRef.current;
+    if (!map) return;
 
-		const { center: initialCenter, zoom: initialZoom } =
-			initialViewRef.current;
+    map.flyTo({
+      center: [place.lng, place.lat],
+      zoom: 15,
+      essential: true,
+    });
 
-		const map = new maplibregl.Map({
-			container,
-			style: getMapStyle(),
-			center: initialCenter,
-			zoom: initialZoom,
-			pitch: 0,
-			bearing: 0,
-			maxPitch: 0,
-			dragRotate: false,
-			pitchWithRotate: false,
-			attributionControl: false,
-		});
+    searchMarkerRef.current?.remove();
+    searchMarkerRef.current = new maplibregl.Marker({
+      element: createSearchMarkerElement(place.name),
+      anchor: "center",
+    })
+      .setLngLat([place.lng, place.lat])
+      .addTo(map);
+  }, []);
 
-		map.touchPitch.disable();
-		map.addControl(
-			new maplibregl.NavigationControl({ showCompass: false }),
-			"top-right",
-		);
-		map.addControl(
-			new maplibregl.AttributionControl({ compact: true }),
-			"bottom-right",
-		);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-		const closePlacementPopup = () => {
-			placementPopupRef.current?.remove();
-			placementPopupRef.current = null;
-		};
+    const { center: initialCenter, zoom: initialZoom } = initialViewRef.current;
 
-		const addPoint = (lng: number, lat: number, type: PointType) => {
-			setPoints((current) => {
-				const withoutType = current.filter((point) => point.type !== type);
-				return [
-					...withoutType,
-					{
-						id: crypto.randomUUID(),
-						lng,
-						lat,
-						type,
-					},
-				];
-			});
-		};
+    const map = new maplibregl.Map({
+      container,
+      style: getMapStyle(),
+      center: initialCenter,
+      zoom: initialZoom,
+      pitch: 0,
+      bearing: 0,
+      maxPitch: 0,
+      dragRotate: false,
+      pitchWithRotate: false,
+      attributionControl: false,
+    });
 
-		const openPlacementPopup = (lngLat: maplibregl.LngLat) => {
-			closePlacementPopup();
+    map.touchPitch.disable();
+    map.addControl(
+      new maplibregl.NavigationControl({ showCompass: false }),
+      "top-right"
+    );
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-right"
+    );
 
-			const popup = new maplibregl.Popup({
-				closeButton: false,
-				closeOnClick: false,
-				anchor: "bottom",
-				offset: 12,
-				className: "placement-popup",
-			});
+    const closePlacementPopup = () => {
+      placementPopupRef.current?.remove();
+      placementPopupRef.current = null;
+    };
 
-			const content = createPlacementDialogElement({
-				onSelect: (type) => {
-					addPoint(lngLat.lng, lngLat.lat, type);
-					closePlacementPopup();
-				},
-				onCancel: closePlacementPopup,
-			});
+    const addPoint = (lng: number, lat: number, type: PointType) => {
+      setPoints((current) => {
+        const withoutType = current.filter((point) => point.type !== type);
+        return [
+          ...withoutType,
+          {
+            id: crypto.randomUUID(),
+            lng,
+            lat,
+            type,
+          },
+        ];
+      });
+    };
 
-			popup.setDOMContent(content).setLngLat(lngLat).addTo(map);
-			placementPopupRef.current = popup;
-		};
+    const openPlacementPopup = (lngLat: maplibregl.LngLat) => {
+      closePlacementPopup();
 
-		map.on("click", (event) => {
-			openPlacementPopup(event.lngLat);
-		});
+      const popup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        anchor: "bottom",
+        offset: 0,
+        className: "placement-popup",
+      });
 
-		mapRef.current = map;
+      const content = createPlacementDialogElement({
+        onSelect: (type) => {
+          addPoint(lngLat.lng, lngLat.lat, type);
+          closePlacementPopup();
+        },
+        onCancel: closePlacementPopup,
+      });
 
-		return () => {
-			closePlacementPopup();
-			for (const marker of markersRef.current.values()) {
-				marker.remove();
-			}
-			markersRef.current.clear();
-			map.remove();
-			mapRef.current = null;
-		};
-	}, []);
+      popup.setDOMContent(content).setLngLat(lngLat).addTo(map);
+      placementPopupRef.current = popup;
+    };
 
-	useEffect(() => {
-		const map = mapRef.current;
-		if (!map) return;
+    map.on("click", (event) => {
+      openPlacementPopup(event.lngLat);
+    });
 
-		const activeIds = new Set(points.map((point) => point.id));
+    mapRef.current = map;
 
-		for (const [id, marker] of markersRef.current.entries()) {
-			if (!activeIds.has(id)) {
-				marker.remove();
-				markersRef.current.delete(id);
-			}
-		}
+    return () => {
+      closePlacementPopup();
+      searchMarkerRef.current?.remove();
+      searchMarkerRef.current = null;
+      for (const marker of markersRef.current.values()) {
+        marker.remove();
+      }
+      markersRef.current.clear();
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
 
-		for (const point of points) {
-			const existing = markersRef.current.get(point.id);
-			if (existing) {
-				existing.setLngLat([point.lng, point.lat]);
-				continue;
-			}
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
 
-			const marker = new maplibregl.Marker({
-				element: createMarkerElement(point.type),
-				anchor: "center",
-			})
-				.setLngLat([point.lng, point.lat])
-				.addTo(map);
+    const activeIds = new Set(points.map((point) => point.id));
 
-			markersRef.current.set(point.id, marker);
-		}
-	}, [points]);
+    for (const [id, marker] of markersRef.current.entries()) {
+      if (!activeIds.has(id)) {
+        marker.remove();
+        markersRef.current.delete(id);
+      }
+    }
 
-	return <div ref={containerRef} className="h-full w-full" />;
+    for (const point of points) {
+      const existing = markersRef.current.get(point.id);
+      if (existing) {
+        existing.setLngLat([point.lng, point.lat]);
+        continue;
+      }
+
+      const marker = new maplibregl.Marker({
+        element: createMarkerElement(point.type),
+        anchor: "center",
+      })
+        .setLngLat([point.lng, point.lat])
+        .addTo(map);
+
+      markersRef.current.set(point.id, marker);
+    }
+  }, [points]);
+
+  return (
+    <div className="relative h-full w-full">
+      <PlacesSearchBar onPlaceSelect={handlePlaceSelect} />
+      <div ref={containerRef} className="h-full w-full" />
+    </div>
+  );
 }
