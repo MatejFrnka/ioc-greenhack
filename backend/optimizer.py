@@ -196,7 +196,7 @@ def end_of_week_charge(backend, home, locations, capacity, weekly_kwh):
     return None
 
 
-def optimize(backend, home=None, locations=None, care=COST_CARE):
+def optimize(backend, home=None, locations=None, care=COST_CARE, battery_kwh=None):
     """Run the full pipeline.
 
     Returns (plan, capacity, weekly_km, weekly_kwh, distances, reason). `distances`
@@ -204,7 +204,8 @@ def optimize(backend, home=None, locations=None, care=COST_CARE):
     None when feasible, else a human-readable cause.
 
     home/locations default to the backend's own data (handy for the CLI); the
-    API passes the user's placed points instead.
+    API passes the user's placed points instead. `battery_kwh` overrides the
+    config pack size (the user picks Small/Mid/Large in the UI).
     """
     if home is None:
         home = backend.get_home()
@@ -214,7 +215,7 @@ def optimize(backend, home=None, locations=None, care=COST_CARE):
 
     weekly_km = sum(distances.values())
     weekly_kwh = weekly_km * CONSUMPTION_KWH_PER_KM
-    capacity = float(BATTERY_KWH)        # real pack; the floor below now binds
+    capacity = float(battery_kwh) if battery_kwh else float(BATTERY_KWH)  # the pack; the floor below binds
     floor_kwh = FLOOR_FRACTION * capacity
     end_kwh = END_FRACTION * capacity     # required level at the end of the week
 

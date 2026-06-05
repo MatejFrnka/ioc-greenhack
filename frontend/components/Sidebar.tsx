@@ -2,7 +2,7 @@ import { type SelectedPlace } from "@/components/PlacesSearchBar";
 import SidebarAnalysis from "@/components/SidebarAnalysis";
 import SidebarSetup from "@/components/SidebarSetup";
 import { type MapPoint } from "@/lib/map-points";
-import { type PlanResponse } from "@/lib/plan";
+import { BATTERY_CAPACITY_OPTIONS, type PlanResponse } from "@/lib/plan";
 
 export type PlacementStage = "home" | "locations";
 export type SidebarView = "setup" | "analysis";
@@ -19,6 +19,8 @@ interface SidebarProps {
   onNavigate: (point: MapPoint) => void;
   onDelete: (id: string) => void;
   onHoverChargingStation: (key: string | null) => void;
+  batteryCapacity: number;
+  onBatteryCapacityChange: (kwh: number) => void;
 }
 
 export default function Sidebar({
@@ -33,6 +35,8 @@ export default function Sidebar({
   onNavigate,
   onDelete,
   onHoverChargingStation,
+  batteryCapacity,
+  onBatteryCapacityChange,
 }: SidebarProps) {
   const hasHome = points.some((point) => point.type === "home");
 
@@ -64,17 +68,49 @@ export default function Sidebar({
 
       <div className="shrink-0 px-8 py-6">
         {view === "setup" ? (
-          <button
-            type="button"
-            disabled={!hasHome}
-            onClick={() => {
-              onAnalyze();
-              onViewChange("analysis");
-            }}
-            className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-zinc-900 transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Analyze
-          </button>
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-zinc-500">
+                Battery capacity
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {BATTERY_CAPACITY_OPTIONS.map((option) => {
+                  const isActive = batteryCapacity === option.kwh;
+                  return (
+                    <button
+                      key={option.kwh}
+                      type="button"
+                      onClick={() => onBatteryCapacityChange(option.kwh)}
+                      aria-pressed={isActive}
+                      className={`flex flex-col items-center rounded-xl border px-2 py-2 transition ${
+                        isActive
+                          ? "border-primary bg-primary/10 text-zinc-900"
+                          : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold">
+                        {option.label}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {option.kwh} kWh
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={!hasHome}
+              onClick={() => {
+                onAnalyze();
+                onViewChange("analysis");
+              }}
+              className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-zinc-900 transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Analyze
+            </button>
+          </div>
         ) : (
           <button
             type="button"

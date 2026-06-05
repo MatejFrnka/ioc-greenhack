@@ -84,7 +84,8 @@ class ConcreateBackend(Backend):
                         charger_type=self._charger_type(charger_type),
                         charger_kilowatts=int(power),
                         # distance_to_location=self._air_distance(location.lat, location.long, lat, lon),
-                        distance_to_location=self._pstore.get(location.lat, location.long, lat, lon)['travel_time_s'],
+                        # Google returns metres; this field is a distance in km (used as the detour penalty).
+                        distance_to_location=self._pstore.get(location.lat, location.long, lat, lon)['distance_m'] / 1000.0,
                     )
                 )
 
@@ -94,7 +95,8 @@ class ConcreateBackend(Backend):
         dists = {d: 0.0 for d in DayOfWeek}
 
         for loc in locations:
-            dist = self._pstore.get(home.lat, home.long, loc.lat, loc.long)['distance_m']
+            # Google returns metres; the optimizer works in kilometres.
+            dist = self._pstore.get(home.lat, home.long, loc.lat, loc.long)['distance_m'] / 1000.0
             # dist = self._air_distance(home.lat, home.long, loc.lat, loc.long)
 
             for d in loc.visits:
@@ -114,8 +116,8 @@ class ConcreateBackend(Backend):
         return chargers
 
     def distance(self, a: Location, b: Location) -> float:
-        # one-way, km
-        return self._air_distance(a.lat, a.long, b.lat, b.long)
+        # one-way road distance in km, matching estimate_distance (cached in PathStore).
+        return self._pstore.get(a.lat, a.long, b.lat, b.long)['distance_m'] / 1000.0
 
     def walking_path(self, location: Location, charger: ChargingStation):
         route = self._pstore.get(location.lat, location.long, charger.lat, charger.long, 'walking')
