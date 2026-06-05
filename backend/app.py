@@ -21,13 +21,7 @@ def location_from_json(data: dict) -> Location:
     )
 
 
-@app.post("/api/plan")
-def plan():
-    data = request.json
-    home = location_from_json(data["home"])
-    locations = [location_from_json(loc) for loc in data["locations"]]
-    battery_kwh = data.get("battery_kwh")  # user-chosen pack size (Small/Mid/Large)
-
+def solution(home, locations, battery_kwh):
     result, capacity, weekly_km, weekly_kwh, distances, reason = optimize(
         backend, home=home, locations=locations, battery_kwh=battery_kwh
     )
@@ -46,7 +40,7 @@ def plan():
     for s in stations_result:
         del s['location_from']
 
-    return jsonify({
+    return {
         "charging_stations": stations_result,
         "weekly_distance": {day.name: km for day, km in distances.items()},
         "daily_peak_kwh": {
@@ -59,6 +53,18 @@ def plan():
         "reason": reason,
         "paths_from_home": [backend.drive_path(home, loc) for loc in locations],
         "paths_from_stations": [backend.walking_path(s['location_from'], (s['lat'], s['long'])) for s in stations]
+    }
+
+
+@app.post("/api/plan")
+def plan():
+    data = request.json
+    home = location_from_json(data["home"])
+    locations = [location_from_json(loc) for loc in data["locations"]]
+    # battery_kwh = data.get("battery_kwh")  # user-chosen pack size (Small/Mid/Large)
+
+    return jsonify({
+        battery_kwh: solution(home, locations, battery_kwh) for battery_kwh in [40, 60, 80]
     })
 
 
