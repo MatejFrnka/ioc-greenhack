@@ -3,7 +3,9 @@ import pandas as pd
 import geopandas as gpd
 import shapely
 # import osmnx as ox
-import networkit as nk
+# import networkit as nk
+import numpy as np
+from scipy.spatial.ckdtree import cKDTree
 import dotenv
 import googlemaps
 import googlemaps.convert
@@ -51,10 +53,13 @@ class ConcreateBackend(Backend):
     def __init__(self):
         # self._drive_map_set = self._create_map_set(os.path.join(DATA_DIR, 'czech-republic-260604.osm.pbf'))
         self._stations = self._load_stations(os.path.join(DATA_DIR, 'chargers_mpo.gpkg'))
+        self._ckdtree = self._build_ckdtree()
         self._pstore = PathStore()
 
     def best_charging_stations(self, location: Location) -> list[ChargingStation]:
         stations = self._stations_within_range(location.lat, location.long, 1000)
+        if stations.empty:
+            stations = self._closest_stations(location.lat, location.long)
 
         chargers = []
 
@@ -197,6 +202,29 @@ class ConcreateBackend(Backend):
 
         # 5. Spatial filter
         return gdf_m[gdf_m.intersects(buffer)].to_crs(epsg=4326)
+
+    def _build_ckdtree(self):
+        gdf = self._stations.to_crs(epsg=4326)
+
+        # 3. Project BOTH to a metric CRS (Web Mercator for simplicity)
+        gdf_m = gdf.to_crs(epsg=3857)
+
+        coords = np.array([
+            (geom.x, geom.y) for geom in gdf_m.geometry
+        ])
+        return cKDTree(coords)
+
+    def _closest_stations(self, lat: float, lon: float):
+        center = gpd.GeoSeries([shapely.Point(lon, lat)], crs="EPSG:4326")
+        center_m = center.to_crs(epsg=3857)
+
+        query_coord = np.array([
+            center_m.geometry.iloc[0].x,
+            center_m.geometry.iloc[0].y
+        ])
+
+        distances, indices = self._ckdtree.query(query_coord, k=3)
+        return self._stations.iloc[indices]
 
     def _air_distance(self, lat1, lon1, lat2, lon2):
         p1 = gpd.GeoSeries([shapely.Point(lon1, lat1)], crs="EPSG:4326")
