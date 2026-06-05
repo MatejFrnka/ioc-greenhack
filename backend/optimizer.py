@@ -43,6 +43,7 @@ class Slot:
     dwell_min: int
     detour_km: float
     price: float            # EUR/kWh, derived from charging speed (see config)
+    source: object          # the original ChargingStation (for the API response)
 
 
 def build_events(backend, home, locations, distances):
@@ -59,7 +60,7 @@ def build_events(backend, home, locations, distances):
             slots = [
                 Slot(label, f"{s.charger_type.name}{s.charger_kilowatts}kW",
                      s.charger_kilowatts, p.time_spent,
-                     s.distance_to_location, price_per_kwh(s.charger_kilowatts))
+                     s.distance_to_location, price_per_kwh(s.charger_kilowatts), s)
                 for s in backend.best_charging_stations(p)
             ]
             events.append(("park", d, label, slots))
@@ -111,7 +112,7 @@ def solve(events, capacity, floor_kwh, care):
                     money = fill * s.price
                     edge = detour_cost(s.detour_km) + care * money
                     act = ("charge", day, label, s.station, fill,
-                           fill / s.speed_kw * 60.0, s.detour_km, money)
+                           fill / s.speed_kw * 60.0, s.detour_km, money, s.source)
                     relax((b2, k + 1), cost + edge, act)
 
         dp = ndp
@@ -137,10 +138,16 @@ def solve(events, capacity, floor_kwh, care):
     return {"sessions": k, "actions": actions, "care": care}
 
 
-def optimize(backend, care=COST_CARE):
-    """Run the full pipeline; returns (plan, capacity, weekly_km, weekly_kwh)."""
-    home = backend.get_home()
-    locations = backend.get_locations_list()
+def optimize(backend, home=None, locations=None, care=COST_CARE):
+    """Run the full pipeline; returns (plan, capacity, weekly_km, weekly_kwh).
+
+    home/locations default to the backend's own data (handy for the CLI); the
+    API passes the user's placed points instead.
+    """
+    if home is None:
+        home = backend.get_home()
+    if locations is None:
+        locations = backend.get_locations_list()
     distances = backend.estimate_distance(home, locations)
 
     weekly_km = sum(distances.values())
@@ -151,6 +158,27 @@ def optimize(backend, care=COST_CARE):
     events = build_events(backend, home, locations, distances)
     plan = solve(events, capacity, floor_kwh, float(care))
     return plan, capacity, weekly_km, weekly_kwh
+
+
+def chosen_charging_stations(plan):
+    """The stations the optimizer actually picked, in the frontend's shape:
+    one entry per charging session, tagged with the day it happens."""
+    if plan is None:
+        return []
+    stations = []
+    for a in plan["actions"]:
+        if a[0] != "charge":
+            continue
+        day, source = a[1], a[8]
+        stations.append({
+            "lat": source.lat,
+            "long": source.long,
+            "charger_type": source.charger_type.name,
+            "charger_kilowatts": source.charger_kilowatts,
+            "distance_to_location": source.distance_to_location,
+            "visit_day": day.name,
+        })
+    return stations
 
 
 def report(plan, capacity, weekly_km, weekly_kwh):
@@ -165,7 +193,7 @@ def report(plan, capacity, weekly_km, weekly_kwh):
     for a in plan["actions"]:
         if a[0] != "charge":
             continue
-        _, day, label, station, fill, dur, det, eur = a
+        _, day, label, station, fill, dur, det, eur, _src = a
         detour_km += det
         detour_pen += detour_cost(det)
         money += eur
