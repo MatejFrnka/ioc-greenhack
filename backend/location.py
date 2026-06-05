@@ -23,6 +23,7 @@ class Location:
 class ChargerType(enum.Enum):
     AC = 0
     DC = 1
+    UNKNOWN = -1
 
 
 @dataclasses.dataclass
