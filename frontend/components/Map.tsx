@@ -47,6 +47,7 @@ const PATHS_SOURCE_ID = "paths-from-home";
 const PATHS_LAYER_ID = "paths-from-home-lines";
 const STATION_PATHS_SOURCE_ID = "paths-from-stations";
 const STATION_PATHS_LAYER_ID = "paths-from-stations-lines";
+const STATION_PATHS_COLOR = "#64748b";
 const PRIMARY_COLOR = "#95e06c";
 const PATHS_LINE_WIDTH: maplibregl.ExpressionSpecification = [
   "interpolate",
@@ -126,19 +127,12 @@ function removePathsLayer(map: maplibregl.Map) {
 }
 
 function stationPathsToGeoJSON(
-  paths: PathFromHome[],
-  chargingStations: ChargingStation[]
+  paths: PathFromHome[]
 ): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: paths.flatMap((path, index) => {
+    features: paths.flatMap((path) => {
       if (path.path.length < 2) return [];
-
-      const station = chargingStations[index];
-      const color =
-        station?.charger_type === "AC"
-          ? CHARGING_STATION_AC_COLOR
-          : CHARGING_STATION_DC_COLOR;
 
       return [
         {
@@ -147,7 +141,7 @@ function stationPathsToGeoJSON(
             type: "LineString" as const,
             coordinates: path.path.map((point) => [point.lng, point.lat]),
           },
-          properties: { distance: path.distance, color },
+          properties: { distance: path.distance },
         },
       ];
     }),
@@ -165,15 +159,14 @@ function removeStationPathsLayer(map: maplibregl.Map) {
 
 function updatePathsFromStationsLayer(
   map: maplibregl.Map,
-  paths: PathFromHome[],
-  chargingStations: ChargingStation[]
+  paths: PathFromHome[]
 ) {
   if (paths.length === 0) {
     removeStationPathsLayer(map);
     return;
   }
 
-  const data = stationPathsToGeoJSON(paths, chargingStations);
+  const data = stationPathsToGeoJSON(paths);
   const existing = map.getSource(STATION_PATHS_SOURCE_ID) as
     | maplibregl.GeoJSONSource
     | undefined;
@@ -193,7 +186,7 @@ function updatePathsFromStationsLayer(
       "line-cap": "round",
     },
     paint: {
-      "line-color": ["get", "color"],
+      "line-color": STATION_PATHS_COLOR,
       "line-width": PATHS_LINE_WIDTH,
       "line-opacity": 0.9,
       "line-dasharray": [2, 2],
@@ -738,11 +731,7 @@ export default function Map({
         removeStationPathsLayer(map);
         return;
       }
-      updatePathsFromStationsLayer(
-        map,
-        pathsFromStations,
-        chargingStations
-      );
+      updatePathsFromStationsLayer(map, pathsFromStations);
     };
 
     if (map.isStyleLoaded()) {
@@ -750,7 +739,7 @@ export default function Map({
     } else {
       map.once("load", apply);
     }
-  }, [pathsFromStations, chargingStations, sidebarView]);
+  }, [pathsFromStations, sidebarView]);
 
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
