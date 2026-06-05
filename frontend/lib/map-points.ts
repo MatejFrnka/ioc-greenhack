@@ -1,3 +1,12 @@
+export type DayOfWeek =
+  | "MONDAY"
+  | "TUESDAY"
+  | "WEDNESDAY"
+  | "THURSDAY"
+  | "FRIDAY"
+  | "SATURDAY"
+  | "SUNDAY";
+
 export type PointType =
   | "home"
   | "work"
@@ -10,6 +19,8 @@ export interface MapPoint {
   lng: number;
   lat: number;
   type: PointType;
+  visits: DayOfWeek[];
+  timeSpentMinutes: number;
 }
 
 const ALPHA = 0.9;

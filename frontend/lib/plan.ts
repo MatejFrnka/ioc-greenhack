@@ -1,13 +1,6 @@
-import type { MapPoint, PointType } from "@/lib/map-points";
+import type { DayOfWeek, MapPoint, PointType } from "@/lib/map-points";
 
-export type DayOfWeek =
-  | "MONDAY"
-  | "TUESDAY"
-  | "WEDNESDAY"
-  | "THURSDAY"
-  | "FRIDAY"
-  | "SATURDAY"
-  | "SUNDAY";
+export type { DayOfWeek };
 
 export interface PlanLocation {
   lat: number;
@@ -38,6 +31,26 @@ export interface PlanResponse {
   extra_walk_time: number;
 }
 
+export const ALL_DAYS: DayOfWeek[] = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+];
+
+export const DAY_SHORT_LABELS: Record<DayOfWeek, string> = {
+  MONDAY: "Mon",
+  TUESDAY: "Tue",
+  WEDNESDAY: "Wed",
+  THURSDAY: "Thu",
+  FRIDAY: "Fri",
+  SATURDAY: "Sat",
+  SUNDAY: "Sun",
+};
+
 const WEEKDAYS: DayOfWeek[] = [
   "MONDAY",
   "TUESDAY",
@@ -48,7 +61,7 @@ const WEEKDAYS: DayOfWeek[] = [
 
 const WEEKEND: DayOfWeek[] = ["SATURDAY", "SUNDAY"];
 
-const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
+export const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
   home: [],
   work: WEEKDAYS,
   school: WEEKDAYS,
@@ -56,7 +69,7 @@ const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
   question_mark: ["WEDNESDAY"],
 };
 
-const DEFAULT_TIME_SPENT: Record<PointType, number> = {
+export const DEFAULT_TIME_SPENT_MINUTES: Record<PointType, number> = {
   home: 720,
   work: 480,
   school: 360,
@@ -64,12 +77,16 @@ const DEFAULT_TIME_SPENT: Record<PointType, number> = {
   question_mark: 120,
 };
 
+export function defaultHoursForType(type: PointType): number {
+  return DEFAULT_TIME_SPENT_MINUTES[type] / 60;
+}
+
 function pointToLocation(point: MapPoint): PlanLocation {
   return {
     lat: point.lat,
     long: point.lng,
-    time_spent: DEFAULT_TIME_SPENT[point.type],
-    visits: DEFAULT_VISITS[point.type],
+    time_spent: point.timeSpentMinutes,
+    visits: point.visits,
   };
 }
 

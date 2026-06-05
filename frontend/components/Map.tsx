@@ -22,7 +22,14 @@ import { createPointActionDialogElement } from "@/components/PointActionDialog";
 import PlacesSearchBar, {
   type SelectedPlace,
 } from "@/components/PlacesSearchBar";
+import ScheduleDialog from "@/components/ScheduleDialog";
 import MapPanel from "@/components/MapPanel";
+
+interface ScheduleDraft {
+  lng: number;
+  lat: number;
+  type: PointType;
+}
 
 interface MapProps {
   center?: [number, number];
@@ -98,8 +105,70 @@ export default function Map({
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft | null>(null);
+  const [scheduleScreenPos, setScheduleScreenPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const openScheduleRef = useRef<(draft: ScheduleDraft) => void>(() => {});
 
   const chargingStations = plan?.charging_stations ?? [];
+
+  const addPoint = useCallback(
+    (
+      lng: number,
+      lat: number,
+      type: PointType,
+      visits: MapPoint["visits"],
+      timeSpentMinutes: number
+    ) => {
+      setPoints((current) => {
+        const withoutType = current.filter((point) => point.type !== type);
+        return [
+          ...withoutType,
+          {
+            id: crypto.randomUUID(),
+            lng,
+            lat,
+            type,
+            visits,
+            timeSpentMinutes,
+          },
+        ];
+      });
+    },
+    []
+  );
+
+  openScheduleRef.current = (draft) => {
+    setScheduleDraft(draft);
+  };
+
+  const updateScheduleScreenPos = useCallback(() => {
+    if (!scheduleDraft || !mapRef.current) return;
+    const point = mapRef.current.project([scheduleDraft.lng, scheduleDraft.lat]);
+    setScheduleScreenPos({ x: point.x, y: point.y });
+  }, [scheduleDraft]);
+
+  useEffect(() => {
+    if (!scheduleDraft) {
+      setScheduleScreenPos(null);
+      return;
+    }
+
+    updateScheduleScreenPos();
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    map.on("move", updateScheduleScreenPos);
+    map.on("zoom", updateScheduleScreenPos);
+
+    return () => {
+      map.off("move", updateScheduleScreenPos);
+      map.off("zoom", updateScheduleScreenPos);
+    };
+  }, [scheduleDraft, updateScheduleScreenPos]);
 
   const removePoint = useCallback((id: string) => {
     setPoints((current) => current.filter((point) => point.id !== id));
@@ -176,21 +245,6 @@ export default function Map({
       pointActionPopupRef.current = null;
     };
 
-    const addPoint = (lng: number, lat: number, type: PointType) => {
-      setPoints((current) => {
-        const withoutType = current.filter((point) => point.type !== type);
-        return [
-          ...withoutType,
-          {
-            id: crypto.randomUUID(),
-            lng,
-            lat,
-            type,
-          },
-        ];
-      });
-    };
-
     const openPointActionPopup = (point: MapPoint) => {
       closePlacementPopup();
       closePointActionPopup();
@@ -234,8 +288,12 @@ export default function Map({
 
       const content = createPlacementDialogElement({
         onSelect: (type) => {
-          addPoint(lngLat.lng, lngLat.lat, type);
           closePlacementPopup();
+          openScheduleRef.current({
+            lng: lngLat.lng,
+            lat: lngLat.lat,
+            type,
+          });
         },
         onCancel: closePlacementPopup,
       });
@@ -245,6 +303,7 @@ export default function Map({
     };
 
     map.on("click", (event) => {
+      setScheduleDraft(null);
       openPlacementPopup(event.lngLat);
     });
 
@@ -384,6 +443,32 @@ export default function Map({
         onDelete={removePoint}
       />
       <div ref={containerRef} className="h-full w-full" />
+
+      {scheduleDraft && scheduleScreenPos && (
+        <div
+          className="pointer-events-none absolute z-20"
+          style={{
+            left: scheduleScreenPos.x,
+            top: scheduleScreenPos.y,
+            transform: "translate(-50%, calc(-100% - 12px))",
+          }}
+        >
+          <ScheduleDialog
+            type={scheduleDraft.type}
+            onConfirm={(visits, hours) => {
+              addPoint(
+                scheduleDraft.lng,
+                scheduleDraft.lat,
+                scheduleDraft.type,
+                visits,
+                Math.round(hours * 60)
+              );
+              setScheduleDraft(null);
+            }}
+            onCancel={() => setScheduleDraft(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }
