@@ -11,10 +11,14 @@ export interface SelectedPlace {
 
 interface PlacesSearchBarProps {
   onPlaceSelect: (place: SelectedPlace) => void;
+  placeholder?: string;
+  variant?: "floating" | "inline";
 }
 
 export default function PlacesSearchBar({
   onPlaceSelect,
+  placeholder = "Search for a location...",
+  variant = "inline",
 }: PlacesSearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const onPlaceSelectRef = useRef(onPlaceSelect);
@@ -66,23 +70,33 @@ export default function PlacesSearchBar({
     };
   }, []);
 
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
-      <div className="pointer-events-auto relative mx-auto w-full max-w-xl">
-        <span
-          className="material-icons pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-xl text-zinc-400"
-          aria-hidden="true"
-        >
-          search
-        </span>
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder="Search for a location..."
-          autoComplete="off"
-          className="w-full rounded-xl border border-zinc-200 bg-white py-3 pr-4 pl-11 text-sm text-zinc-900 shadow-lg outline-none placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
-        />
-      </div>
+  const input = (
+    <div className="relative w-full">
+      <span
+        className="material-icons pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-xl text-zinc-400"
+        aria-hidden="true"
+      >
+        search
+      </span>
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder={placeholder}
+        autoComplete="off"
+        className="w-full rounded-xl border border-zinc-200 bg-white py-3 pr-4 pl-11 text-sm text-zinc-900 shadow-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+      />
     </div>
   );
+
+  if (variant === "floating") {
+    return (
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
+        <div className="pointer-events-auto relative mx-auto w-full max-w-xl">
+          {input}
+        </div>
+      </div>
+    );
+  }
+
+  return input;
 }

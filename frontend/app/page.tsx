@@ -1,9 +1,9 @@
-import Map from "@/components/Map";
+import MapWorkspace from "@/components/MapWorkspace";
 
 export default function Home() {
 	return (
 		<main className="fixed inset-0">
-			<Map />
+			<MapWorkspace />
 		</main>
 	);
 }

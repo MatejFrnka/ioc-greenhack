@@ -72,3 +72,7 @@ export const POINT_TYPE_CONFIG: Record<
 export const PLACEMENT_POINT_TYPES = Object.keys(
   POINT_TYPE_CONFIG
 ) as PointType[];
+
+export const FREQUENT_LOCATION_TYPES = PLACEMENT_POINT_TYPES.filter(
+  (type) => type !== "home"
+);

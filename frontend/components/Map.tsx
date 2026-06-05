@@ -11,6 +11,8 @@ import {
 } from "@/lib/map-points";
 import {
   chargingStationKey,
+  DEFAULT_TIME_SPENT_MINUTES,
+  DEFAULT_VISITS,
   fetchPlan,
   formatVisitDay,
   pointsToPlanRequest,
@@ -19,11 +21,9 @@ import {
 } from "@/lib/plan";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
 import { createPointActionDialogElement } from "@/components/PointActionDialog";
-import PlacesSearchBar, {
-  type SelectedPlace,
-} from "@/components/PlacesSearchBar";
+import { type SelectedPlace } from "@/components/PlacesSearchBar";
 import ScheduleDialog from "@/components/ScheduleDialog";
-import MapPanel from "@/components/MapPanel";
+import Sidebar, { type PlacementStage } from "@/components/Sidebar";
 
 interface ScheduleDraft {
   lng: number;
@@ -60,14 +60,6 @@ function createMarkerElement(
   return el;
 }
 
-function createSearchMarkerElement(name: string): HTMLDivElement {
-  const el = document.createElement("div");
-  el.className =
-    "h-4 w-4 rounded-full border-2 border-white bg-blue-600 shadow-md";
-  el.title = name;
-  return el;
-}
-
 function createChargingMarkerElement(station: ChargingStation): HTMLDivElement {
   const isDc = station.charger_type === "DC";
   const el = document.createElement("div");
@@ -75,7 +67,11 @@ function createChargingMarkerElement(station: ChargingStation): HTMLDivElement {
     "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md";
   el.style.backgroundColor = isDc ? "#16a34a" : "#ca8a04";
   el.style.color = "#ffffff";
-  el.title = `${station.charger_kilowatts}kW ${station.charger_type} · ${formatVisitDay(station.visit_day)} · ${station.distance_to_location.toFixed(1)} km`;
+  el.title = `${station.charger_kilowatts}kW ${
+    station.charger_type
+  } · ${formatVisitDay(
+    station.visit_day
+  )} · ${station.distance_to_location.toFixed(1)} km`;
 
   const iconEl = document.createElement("span");
   iconEl.className = "material-icons text-[16px] leading-none";
@@ -94,7 +90,11 @@ export default function Map({
   const placementPopupRef = useRef<maplibregl.Popup | null>(null);
   const pointActionPopupRef = useRef<maplibregl.Popup | null>(null);
   const openPointActionPopupRef = useRef<(point: MapPoint) => void>(() => {});
-  const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const openPlacementPopupRef = useRef<(lng: number, lat: number) => void>(
+    () => {}
+  );
+  const placementStageRef = useRef<PlacementStage>("home");
+  const addHomePointRef = useRef<(lng: number, lat: number) => void>(() => {});
   const markersRef = useRef(new globalThis.Map<string, maplibregl.Marker>());
   const chargingMarkersRef = useRef(
     new globalThis.Map<string, maplibregl.Marker>()
@@ -102,19 +102,44 @@ export default function Map({
   const initialViewRef = useRef({ center, zoom });
 
   const [points, setPoints] = useState<MapPoint[]>([]);
+  const [placementStage, setPlacementStage] = useState<PlacementStage>("home");
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
-  const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft | null>(null);
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft | null>(
+    null
+  );
   const [scheduleScreenPos, setScheduleScreenPos] = useState<{
     x: number;
     y: number;
   } | null>(null);
   const openScheduleRef = useRef<(draft: ScheduleDraft) => void>(() => {});
+  const planAbortRef = useRef<AbortController | null>(null);
 
   const chargingStations = plan?.charging_stations ?? [];
 
-  const addPoint = useCallback(
+  placementStageRef.current = placementStage;
+
+  const addHomePoint = useCallback((lng: number, lat: number) => {
+    setPoints((current) => {
+      const withoutHome = current.filter((point) => point.type !== "home");
+      return [
+        ...withoutHome,
+        {
+          id: crypto.randomUUID(),
+          lng,
+          lat,
+          type: "home",
+          visits: DEFAULT_VISITS.home,
+          timeSpentMinutes: DEFAULT_TIME_SPENT_MINUTES.home,
+        },
+      ];
+    });
+  }, []);
+
+  addHomePointRef.current = addHomePoint;
+
+  const addLocationPoint = useCallback(
     (
       lng: number,
       lat: number,
@@ -122,23 +147,25 @@ export default function Map({
       visits: MapPoint["visits"],
       timeSpentMinutes: number
     ) => {
-      setPoints((current) => {
-        const withoutType = current.filter((point) => point.type !== type);
-        return [
-          ...withoutType,
-          {
-            id: crypto.randomUUID(),
-            lng,
-            lat,
-            type,
-            visits,
-            timeSpentMinutes,
-          },
-        ];
-      });
+      setPoints((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          lng,
+          lat,
+          type,
+          visits,
+          timeSpentMinutes,
+        },
+      ]);
     },
     []
   );
+
+  useEffect(() => {
+    const hasHome = points.some((point) => point.type === "home");
+    setPlacementStage(hasHome ? "locations" : "home");
+  }, [points]);
 
   openScheduleRef.current = (draft) => {
     setScheduleDraft(draft);
@@ -146,7 +173,10 @@ export default function Map({
 
   const updateScheduleScreenPos = useCallback(() => {
     if (!scheduleDraft || !mapRef.current) return;
-    const point = mapRef.current.project([scheduleDraft.lng, scheduleDraft.lat]);
+    const point = mapRef.current.project([
+      scheduleDraft.lng,
+      scheduleDraft.lat,
+    ]);
     setScheduleScreenPos({ x: point.x, y: point.y });
   }, [scheduleDraft]);
 
@@ -187,24 +217,25 @@ export default function Map({
     });
   }, []);
 
-  const handlePlaceSelect = useCallback((place: SelectedPlace) => {
-    const map = mapRef.current;
-    if (!map) return;
+  const handlePlaceSelect = useCallback(
+    (place: SelectedPlace) => {
+      const map = mapRef.current;
+      if (!map) return;
 
-    map.flyTo({
-      center: [place.lng, place.lat],
-      zoom: 15,
-      essential: true,
-    });
+      map.flyTo({
+        center: [place.lng, place.lat],
+        zoom: 15,
+        essential: true,
+      });
 
-    searchMarkerRef.current?.remove();
-    searchMarkerRef.current = new maplibregl.Marker({
-      element: createSearchMarkerElement(place.name),
-      anchor: "center",
-    })
-      .setLngLat([place.lng, place.lat])
-      .addTo(map);
-  }, []);
+      if (placementStageRef.current === "home") {
+        addHomePoint(place.lng, place.lat);
+      } else {
+        openPlacementPopupRef.current(place.lng, place.lat);
+      }
+    },
+    [addHomePoint]
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -226,10 +257,6 @@ export default function Map({
     });
 
     map.touchPitch.disable();
-    map.addControl(
-      new maplibregl.NavigationControl({ showCompass: false }),
-      "top-right"
-    );
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right"
@@ -265,16 +292,13 @@ export default function Map({
         onCancel: closePointActionPopup,
       });
 
-      popup
-        .setDOMContent(content)
-        .setLngLat([point.lng, point.lat])
-        .addTo(map);
+      popup.setDOMContent(content).setLngLat([point.lng, point.lat]).addTo(map);
       pointActionPopupRef.current = popup;
     };
 
     openPointActionPopupRef.current = openPointActionPopup;
 
-    const openPlacementPopup = (lngLat: maplibregl.LngLat) => {
+    const openPlacementPopup = (lng: number, lat: number) => {
       closePlacementPopup();
       closePointActionPopup();
 
@@ -289,22 +313,24 @@ export default function Map({
       const content = createPlacementDialogElement({
         onSelect: (type) => {
           closePlacementPopup();
-          openScheduleRef.current({
-            lng: lngLat.lng,
-            lat: lngLat.lat,
-            type,
-          });
+          openScheduleRef.current({ lng, lat, type });
         },
         onCancel: closePlacementPopup,
       });
 
-      popup.setDOMContent(content).setLngLat(lngLat).addTo(map);
+      popup.setDOMContent(content).setLngLat([lng, lat]).addTo(map);
       placementPopupRef.current = popup;
     };
 
+    openPlacementPopupRef.current = openPlacementPopup;
+
     map.on("click", (event) => {
       setScheduleDraft(null);
-      openPlacementPopup(event.lngLat);
+      if (placementStageRef.current === "home") {
+        addHomePointRef.current(event.lngLat.lng, event.lngLat.lat);
+      } else {
+        openPlacementPopup(event.lngLat.lng, event.lngLat.lat);
+      }
     });
 
     mapRef.current = map;
@@ -313,8 +339,7 @@ export default function Map({
       closePlacementPopup();
       closePointActionPopup();
       openPointActionPopupRef.current = () => {};
-      searchMarkerRef.current?.remove();
-      searchMarkerRef.current = null;
+      openPlacementPopupRef.current = () => {};
       for (const marker of markersRef.current.values()) {
         marker.remove();
       }
@@ -328,7 +353,9 @@ export default function Map({
     };
   }, [removePoint]);
 
-  useEffect(() => {
+  const analyzePlan = useCallback(() => {
+    planAbortRef.current?.abort();
+
     const request = pointsToPlanRequest(points);
     if (!request) {
       setPlan(null);
@@ -338,6 +365,7 @@ export default function Map({
     }
 
     const controller = new AbortController();
+    planAbortRef.current = controller;
     setPlanLoading(true);
     setPlanError(null);
 
@@ -357,9 +385,18 @@ export default function Map({
           setPlanLoading(false);
         }
       });
-
-    return () => controller.abort();
   }, [points]);
+
+  useEffect(() => {
+    planAbortRef.current?.abort();
+    setPlan(null);
+    setPlanError(null);
+    setPlanLoading(false);
+  }, [points]);
+
+  useEffect(() => {
+    return () => planAbortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -432,43 +469,51 @@ export default function Map({
   }, [chargingStations]);
 
   return (
-    <div className="relative h-full w-full">
-      <PlacesSearchBar onPlaceSelect={handlePlaceSelect} />
-      <MapPanel
+    <div className="flex h-full w-full bg-zinc-100">
+      <Sidebar
         points={points}
         plan={plan}
         planLoading={planLoading}
         planError={planError}
+        onAnalyze={analyzePlan}
+        onPlaceSelect={handlePlaceSelect}
         onNavigate={navigateToPoint}
         onDelete={removePoint}
       />
-      <div ref={containerRef} className="h-full w-full" />
+      <div
+        className="relative min-w-0 flex-1 p-5"
+        style={{ backgroundColor: "white" }}
+      >
+        <div className="relative h-full w-full overflow-hidden rounded-[100px] shadow-md ring-1 ring-zinc-200/80">
+          <div ref={containerRef} className="h-full w-full" />
 
-      {scheduleDraft && scheduleScreenPos && (
-        <div
-          className="pointer-events-none absolute z-20"
-          style={{
-            left: scheduleScreenPos.x,
-            top: scheduleScreenPos.y,
-            transform: "translate(-50%, calc(-100% - 12px))",
-          }}
-        >
-          <ScheduleDialog
-            type={scheduleDraft.type}
-            onConfirm={(visits, hours) => {
-              addPoint(
-                scheduleDraft.lng,
-                scheduleDraft.lat,
-                scheduleDraft.type,
-                visits,
-                Math.round(hours * 60)
-              );
-              setScheduleDraft(null);
-            }}
-            onCancel={() => setScheduleDraft(null)}
-          />
+          {scheduleDraft && scheduleScreenPos && (
+            <div
+              className="pointer-events-none absolute z-20"
+              style={{
+                left: scheduleScreenPos.x,
+                top: scheduleScreenPos.y,
+                transform: "translate(-50%, calc(-100% - 12px))",
+              }}
+            >
+              <ScheduleDialog
+                type={scheduleDraft.type}
+                onConfirm={(visits, hours) => {
+                  addLocationPoint(
+                    scheduleDraft.lng,
+                    scheduleDraft.lat,
+                    scheduleDraft.type,
+                    visits,
+                    Math.round(hours * 60)
+                  );
+                  setScheduleDraft(null);
+                }}
+                onCancel={() => setScheduleDraft(null)}
+              />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

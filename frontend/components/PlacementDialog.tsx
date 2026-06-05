@@ -1,5 +1,5 @@
 import {
-  PLACEMENT_POINT_TYPES,
+  FREQUENT_LOCATION_TYPES,
   POINT_TYPE_CONFIG,
   type PointType,
 } from "@/lib/map-points";
@@ -25,8 +25,7 @@ const ARC_HALF_WIDTH = ARC_RADIUS * Math.sin(ARC_SPAN / 2);
 const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF + EDGE_PAD);
 const CENTER_X = DIALOG_WIDTH / 2;
 const CENTER_Y = ARC_RADIUS + ICON_HALF + EDGE_PAD + CENTER_DOWN_OFFSET;
-const DIALOG_HEIGHT =
-  CENTER_Y + CENTER_BTN_OFFSET + CENTER_BTN_HALF;
+const DIALOG_HEIGHT = CENTER_Y + CENTER_BTN_HALF;
 
 function createMaterialIcon(name: string): HTMLSpanElement {
   const icon = document.createElement("span");
@@ -67,9 +66,9 @@ export function createPlacementDialogElement({
   const arc = document.createElement("div");
   arc.className = "placement-dialog__arc";
 
-  const count = PLACEMENT_POINT_TYPES.length;
+  const count = FREQUENT_LOCATION_TYPES.length;
   for (let i = 0; i < count; i++) {
-    const type = PLACEMENT_POINT_TYPES[i];
+    const type = FREQUENT_LOCATION_TYPES[i];
     const angle = ARC_START - (i * ARC_SPAN) / (count - 1);
     const x = CENTER_X + ARC_RADIUS * Math.cos(angle);
     const y = CENTER_Y - ARC_RADIUS * Math.sin(angle);
