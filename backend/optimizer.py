@@ -13,7 +13,7 @@ is fixed (= the week's driving); so cost is about WHICH stations carry it.
 import math
 import dataclasses
 
-from .location import DayOfWeek
+from .location import DayOfWeek, Location
 from .config import (CONSUMPTION_KWH_PER_KM, FLOOR_FRACTION, END_FRACTION, BATTERY_KWH,
                      SOC_STEP_KWH, SESSION_PENALTY_KM_PER_CHARGE, DETOUR_GROWTH,
                      PRICE_BASE_EUR, PRICE_PER_KW_EUR, COST_CARE)
@@ -44,6 +44,7 @@ class Slot:
     detour_km: float
     price: float            # EUR/kWh, derived from charging speed (see config)
     source: object          # the original ChargingStation (for the API response)
+    location_from: Location
 
 
 def _slots_at(backend, point, label):
@@ -51,7 +52,7 @@ def _slots_at(backend, point, label):
     return [
         Slot(label, f"{s.charger_type.name}{s.charger_kilowatts}kW",
              s.charger_kilowatts, point.time_spent,
-             s.distance_to_location, price_per_kwh(s.charger_kilowatts), s)
+             s.distance_to_location, price_per_kwh(s.charger_kilowatts), s, point)
         for s in backend.best_charging_stations(point)
     ]
 
@@ -125,7 +126,7 @@ def solve(events, capacity, floor_kwh, end_kwh, care):
                     money = fill * s.price
                     edge = detour_cost(s.detour_km) + care * money
                     act = ("charge", day, label, s.station, fill,
-                           fill / s.speed_kw * 60.0, s.detour_km, money, s.source)
+                           fill / s.speed_kw * 60.0, s.detour_km, money, s.source, s.location_from)
                     relax((b2, k + 1), cost + edge, act)
 
         dp = ndp
@@ -192,7 +193,7 @@ def end_of_week_charge(backend, home, locations, capacity, weekly_kwh):
         money = fill * price_per_kwh(s.charger_kilowatts)
         return ("charge", end_day, label,
                 f"{s.charger_type.name}{s.charger_kilowatts}kW", fill,
-                fill / s.charger_kilowatts * 60.0, s.distance_to_location, money, s)
+                fill / s.charger_kilowatts * 60.0, s.distance_to_location, money, s, home)
     return None
 
 
@@ -253,6 +254,7 @@ def chosen_charging_stations(plan):
             "visit_day": day.name,
             "charged_kwh": round(fill, 2),       # how much energy this session adds
             "charge_minutes": round(duration, 1),
+            'location_from': a[9],
         })
     print(stations)
     return stations
