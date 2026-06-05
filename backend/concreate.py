@@ -199,7 +199,7 @@ class ConcreateBackend(Backend):
         p2 = gpd.GeoSeries([shapely.Point(lon2, lat2)], crs="EPSG:4326")
 
         meters = p1.to_crs(3857).distance(p2.to_crs(3857)).iloc[0]
-        return meters / 1000.0  # km (the optimizer works in km)
+        return meters
 
     def _charger_type(self, text: str) -> ChargerType:
         text = text.lower().strip()

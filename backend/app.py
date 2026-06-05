@@ -46,6 +46,7 @@ def plan():
         "extra_walk_time": EXTRA_WALK_TIME,
         "feasible": result is not None,
         "reason": reason,
+        "paths_from_home": [backend.drive_path(home, loc) for loc in locations],
     })
 
 
