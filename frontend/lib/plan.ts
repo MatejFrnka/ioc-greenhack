@@ -109,6 +109,12 @@ export function pointsToPlanRequest(points: MapPoint[]): PlanRequest | null {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5003";
 
+export const CHARGING_STATION_DC_COLOR = "#16a34a";
+export const CHARGING_STATION_AC_COLOR = "#ca8a04";
+
+/** `[lat, long]` tuples from `/api/stations`. */
+export type StationCoordinate = [number, number];
+
 export async function fetchPlan(
   request: PlanRequest,
   signal?: AbortSignal
@@ -125,6 +131,18 @@ export async function fetchPlan(
   }
 
   return response.json() as Promise<PlanResponse>;
+}
+
+export async function fetchStations(
+  signal?: AbortSignal
+): Promise<StationCoordinate[]> {
+  const response = await fetch(`${API_BASE}/api/stations`, { signal });
+
+  if (!response.ok) {
+    throw new Error(`Stations request failed (${response.status})`);
+  }
+
+  return response.json() as Promise<StationCoordinate[]>;
 }
 
 export function formatVisitDay(day: DayOfWeek | null): string {

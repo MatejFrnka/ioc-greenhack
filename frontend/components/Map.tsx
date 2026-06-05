@@ -11,14 +11,18 @@ import {
   type PointType,
 } from "@/lib/map-points";
 import {
+  CHARGING_STATION_AC_COLOR,
+  CHARGING_STATION_DC_COLOR,
   chargingStationKey,
   DEFAULT_TIME_SPENT_MINUTES,
   DEFAULT_VISITS,
   fetchPlan,
+  fetchStations,
   formatVisitDay,
   pointsToPlanRequest,
   type ChargingStation,
   type PlanResponse,
+  type StationCoordinate,
 } from "@/lib/plan";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
 import { createScheduleDialogElement } from "@/components/ScheduleDialog";
@@ -35,6 +39,70 @@ interface MapProps {
 
 const DEFAULT_CENTER: [number, number] = [14.4378, 50.0755];
 const DEFAULT_ZOOM = 11;
+const ALL_STATIONS_SOURCE_ID = "all-stations";
+const ALL_STATIONS_LAYER_ID = "all-stations-dots";
+const PRIMARY_COLOR = "#95e06c";
+const ALL_STATIONS_CIRCLE_RADIUS: maplibregl.ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  8,
+  1,
+  11,
+  2,
+  14,
+  5,
+  17,
+  10,
+];
+
+function stationsToGeoJSON(
+  stations: StationCoordinate[]
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: stations.map(([lat, lng]) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lng, lat] },
+      properties: {},
+    })),
+  };
+}
+
+function updateAllStationsLayer(
+  map: maplibregl.Map,
+  stations: StationCoordinate[]
+) {
+  const data = stationsToGeoJSON(stations);
+  const existing = map.getSource(ALL_STATIONS_SOURCE_ID) as
+    | maplibregl.GeoJSONSource
+    | undefined;
+
+  if (existing) {
+    existing.setData(data);
+    if (map.getLayer(ALL_STATIONS_LAYER_ID)) {
+      map.setPaintProperty(
+        ALL_STATIONS_LAYER_ID,
+        "circle-color",
+        PRIMARY_COLOR
+      );
+      map.setPaintProperty(ALL_STATIONS_LAYER_ID, "circle-opacity", 0.5);
+    }
+    return;
+  }
+
+  map.addSource(ALL_STATIONS_SOURCE_ID, { type: "geojson", data });
+  map.addLayer({
+    id: ALL_STATIONS_LAYER_ID,
+    type: "circle",
+    source: ALL_STATIONS_SOURCE_ID,
+    paint: {
+      "circle-radius": ALL_STATIONS_CIRCLE_RADIUS,
+      "circle-color": PRIMARY_COLOR,
+      "circle-opacity": 0.85,
+    },
+  });
+}
 
 function createMarkerElement(
   type: PointType,
@@ -62,6 +130,12 @@ function createChargingMarkerElement(station: ChargingStation): HTMLDivElement {
   // Outer element is positioned by MapLibre; the inner badge is what we scale.
   const el = document.createElement("div");
   el.className = "charging-marker";
+  el.className =
+    "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md";
+  el.style.backgroundColor = isDc
+    ? CHARGING_STATION_DC_COLOR
+    : CHARGING_STATION_AC_COLOR;
+  el.style.color = "#ffffff";
   el.title = `${station.charger_kilowatts}kW ${
     station.charger_type
   } · ${formatVisitDay(
@@ -104,18 +178,21 @@ export default function Map({
   const chargingMarkersRef = useRef(
     new globalThis.Map<string, maplibregl.Marker>()
   );
+  const allStationsRef = useRef<StationCoordinate[]>([]);
+  const stationsAbortRef = useRef<AbortController | null>(null);
   const initialViewRef = useRef({ center, zoom });
 
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [sidebarView, setSidebarView] = useState<SidebarView>("setup");
   const [placementStage, setPlacementStage] = useState<PlacementStage>("home");
+  const [allStations, setAllStations] = useState<StationCoordinate[]>([]);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const planAbortRef = useRef<AbortController | null>(null);
   const addPointWithDefaultsRef = useRef<
     (lng: number, lat: number, type: PointType) => MapPoint
-  >(() => ({}) as MapPoint);
+  >(() => ({} as MapPoint));
   const updatePointRef = useRef<
     (id: string, visits: DayOfWeek[], timeSpentMinutes: number) => void
   >(() => {});
@@ -152,6 +229,22 @@ export default function Map({
 
   placementStageRef.current = placementStage;
   sidebarViewRef.current = sidebarView;
+  allStationsRef.current = allStations;
+
+  useEffect(() => {
+    stationsAbortRef.current?.abort();
+    const controller = new AbortController();
+    stationsAbortRef.current = controller;
+
+    fetchStations(controller.signal)
+      .then(setAllStations)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load charging stations:", error);
+      });
+
+    return () => controller.abort();
+  }, []);
 
   const addHomePoint = useCallback((lng: number, lat: number) => {
     setPoints((current) => {
@@ -364,6 +457,17 @@ export default function Map({
 
     mapRef.current = map;
 
+    const syncAllStationsLayer = () => {
+      if (allStationsRef.current.length === 0) return;
+      updateAllStationsLayer(map, allStationsRef.current);
+    };
+
+    if (map.isStyleLoaded()) {
+      syncAllStationsLayer();
+    } else {
+      map.once("load", syncAllStationsLayer);
+    }
+
     return () => {
       closePlacementPopup();
       closeSchedulePopup();
@@ -377,10 +481,29 @@ export default function Map({
         marker.remove();
       }
       chargingMarkersRef.current.clear();
+      if (map.getLayer(ALL_STATIONS_LAYER_ID)) {
+        map.removeLayer(ALL_STATIONS_LAYER_ID);
+      }
+      if (map.getSource(ALL_STATIONS_SOURCE_ID)) {
+        map.removeSource(ALL_STATIONS_SOURCE_ID);
+      }
       map.remove();
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || allStations.length === 0) return;
+
+    const apply = () => updateAllStationsLayer(map, allStations);
+
+    if (map.isStyleLoaded()) {
+      apply();
+    } else {
+      map.once("load", apply);
+    }
+  }, [allStations]);
 
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
