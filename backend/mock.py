@@ -54,6 +54,9 @@ class MockBackend(Backend):
             "charging_stations": self.best_charging_stations(home),
             "visit_day": DayOfWeek.WEDNESDAY,
             "weekly_distance": self.estimate_distance(home, locations),
+            "fuel_price": 1.45,
+            "electricity_price": 0.28,
+            "extra_walk_time": 12,
         }
 
     def get_locations_list(self) -> list[Location]:

@@ -27,6 +27,9 @@ def plan_to_dict(result: dict) -> dict:
         "weekly_distance": {
             day.name: distance for day, distance in result["weekly_distance"].items()
         },
+        "fuel_price": result["fuel_price"],
+        "electricity_price": result["electricity_price"],
+        "extra_walk_time": result["extra_walk_time"],
     }
 
 
