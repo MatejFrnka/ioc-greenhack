@@ -13,18 +13,17 @@ const ICON_SIZE = 48;
 const ICON_HALF = ICON_SIZE / 2;
 const CENTER_BTN_SIZE = 40;
 const CENTER_BTN_HALF = CENTER_BTN_SIZE / 2;
-const ARC_RADIUS = 84;
+const ARC_RADIUS = 65;
 const ARC_SPAN = (115 * Math.PI) / 180;
 const ARC_CENTER_ANGLE = Math.PI / 2;
 const ARC_START = ARC_CENTER_ANGLE + ARC_SPAN / 2;
-const CENTER_DOWN_OFFSET = 40;
 const CENTER_BTN_OFFSET = 22;
-const EDGE_PAD = 10;
+const ARC_OFFSET = 35;
 
 const ARC_HALF_WIDTH = ARC_RADIUS * Math.sin(ARC_SPAN / 2);
-const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF + EDGE_PAD);
+const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF);
 const CENTER_X = DIALOG_WIDTH / 2;
-const CENTER_Y = ARC_RADIUS + ICON_HALF + EDGE_PAD + CENTER_DOWN_OFFSET;
+const CENTER_Y = ARC_RADIUS + ICON_HALF;
 const DIALOG_HEIGHT = CENTER_Y + CENTER_BTN_HALF;
 
 function createMaterialIcon(name: string): HTMLSpanElement {
@@ -71,7 +70,7 @@ export function createPlacementDialogElement({
     const type = FREQUENT_LOCATION_TYPES[i];
     const angle = ARC_START - (i * ARC_SPAN) / (count - 1);
     const x = CENTER_X + ARC_RADIUS * Math.cos(angle);
-    const y = CENTER_Y - ARC_RADIUS * Math.sin(angle);
+    const y = CENTER_Y - ARC_RADIUS * Math.sin(angle) + ARC_OFFSET;
     arc.append(createIconButton(type, x, y, onSelect));
   }
 

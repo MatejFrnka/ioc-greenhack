@@ -85,7 +85,6 @@ body {
 
 .placement-dialog__center-btn:hover {
   transform: translate(-50%, -50%) scale(1.06);
-  background: #297373;
 }
 
 .placement-dialog__icon-glyph {
