@@ -5,6 +5,7 @@ from flask_cors import CORS
 
 from .location import DayOfWeek, Location
 from .mock import MockBackend
+from .optimizer import optimize, chosen_charging_stations
 
 app = Flask(__name__)
 CORS(app)
@@ -47,7 +48,13 @@ def plan():
     data = request.json
     home = location_from_json(data["home"])
     locations = [location_from_json(loc) for loc in data["locations"]]
-    return jsonify(plan_to_dict(backend.plan(home, locations)))
+
+    # --- old mock plan (kept for reference) ---
+    # return jsonify(plan_to_dict(backend.plan(home, locations)))
+
+    # --- new: stations chosen by the optimizer ---
+    result, *_ = optimize(backend, home=home, locations=locations)
+    return jsonify({"charging_stations": chosen_charging_stations(result)})
 
 
 if __name__ == "__main__":
