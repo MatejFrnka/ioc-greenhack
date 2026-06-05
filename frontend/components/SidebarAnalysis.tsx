@@ -14,11 +14,24 @@ interface SidebarAnalysisProps {
   onHoverChargingStation: (key: string | null) => void;
 }
 
-function PlanStat({ label, value }: { label: string; value: string }) {
+function HighlightStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+}) {
   return (
-    <div>
-      <dt className="text-zinc-500">{label}</dt>
-      <dd className="font-medium text-zinc-900">{value}</dd>
+    <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 px-4 py-3.5">
+      <div className="flex items-center gap-2 text-sm text-zinc-500">
+        <span className="material-icons text-[18px] leading-none">{icon}</span>
+        <span>{label}</span>
+      </div>
+      <p className="mt-1.5 text-3xl font-bold tracking-tight text-zinc-900">
+        {value}
+      </p>
     </div>
   );
 }
@@ -51,18 +64,18 @@ export default function SidebarAnalysis({
       )}
 
       {plan && !planError && (
-        <div className="flex items-start gap-4">
-          <dl className="flex shrink-0 flex-col gap-3 text-sm">
-            <PlanStat
-              label="Weekly distance"
-              value={`${totalWeeklyKm(plan.weekly_distance).toFixed(1)} km`}
-            />
-            <PlanStat
-              label="Extra walk"
-              value={`${plan.extra_walk_time} min`}
-            />
-          </dl>
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-col gap-4">
+          <HighlightStat
+            icon="route"
+            label="Weekly distance"
+            value={`${totalWeeklyKm(plan.weekly_distance).toFixed(1)} km`}
+          />
+          <HighlightStat
+            icon="alarm"
+            label="Extra time taken"
+            value={`${plan.extra_walk_time} min`}
+          />
+          <div>
             <p className="mb-1 text-sm text-zinc-500">Fuel vs electricity</p>
             <CostBarChart
               fuel={plan.fuel_price}
@@ -72,7 +85,8 @@ export default function SidebarAnalysis({
         </div>
       )}
 
-      {plan && !planError &&
+      {plan &&
+        !planError &&
         Object.keys(plan.daily_peak_kwh ?? {}).length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-zinc-900">
