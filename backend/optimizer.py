@@ -257,6 +257,32 @@ def chosen_charging_stations(plan):
     return stations
 
 
+def daily_remaining_kwh(plan, capacity):
+    """Battery left (kWh) at the END of each day, replaying the plan from full.
+
+    Drives subtract, charges add; days with no events carry the previous level
+    forward. Returns {DayOfWeek: kWh} for the whole week.
+    """
+    if plan is None:
+        return {}
+    end_of_day = {}
+    soc = capacity                       # the week starts at a full battery
+    for a in plan["actions"]:
+        if a[0] == "drive":
+            soc -= a[2]
+        elif a[0] == "charge":
+            soc += a[4]
+        else:
+            continue                     # 'idle' parks don't change the level
+        end_of_day[a[1]] = soc           # last write of a day = its end-of-day level
+
+    remaining, prev = {}, capacity
+    for d in DayOfWeek:
+        prev = end_of_day.get(d, prev)
+        remaining[d] = round(prev, 1)
+    return remaining
+
+
 def report(plan, capacity, weekly_km, weekly_kwh):
     print("EV weekly charging plan")
     print(f"  weekly {weekly_km:.0f} km / {weekly_kwh:.1f} kWh   "

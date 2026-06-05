@@ -3,7 +3,7 @@ from flask_cors import CORS
 
 from .location import DayOfWeek, Location
 from .concreate import ConcreateBackend
-from .optimizer import optimize, chosen_charging_stations
+from .optimizer import optimize, chosen_charging_stations, daily_remaining_kwh
 from .config import (ELECTRICITY_PRICE_CZK_PER_KWH, FUEL_PRICE_CZK_PER_L,
                      PETROL_L_PER_100KM, EXTRA_WALK_TIME)
 
@@ -27,7 +27,7 @@ def plan():
     home = location_from_json(data["home"])
     locations = [location_from_json(loc) for loc in data["locations"]]
 
-    result, _capacity, weekly_km, weekly_kwh, distances, reason = optimize(
+    result, capacity, weekly_km, weekly_kwh, distances, reason = optimize(
         backend, home=home, locations=locations
     )
 
@@ -38,6 +38,9 @@ def plan():
     return jsonify({
         "charging_stations": chosen_charging_stations(result),
         "weekly_distance": {day.name: km for day, km in distances.items()},
+        "daily_remaining_kwh": {
+            day.name: kwh for day, kwh in daily_remaining_kwh(result, capacity).items()
+        },
         "fuel_price": round(fuel_weekly_czk),
         "electricity_price": round(electricity_weekly_czk),
         "extra_walk_time": EXTRA_WALK_TIME,

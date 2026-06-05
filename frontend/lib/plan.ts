@@ -21,11 +21,14 @@ export interface ChargingStation {
   charger_kilowatts: number;
   distance_to_location: number;
   visit_day: DayOfWeek | null;
+  charged_kwh: number;
+  charge_minutes: number;
 }
 
 export interface PlanResponse {
   charging_stations: ChargingStation[];
   weekly_distance: Record<DayOfWeek, number>;
+  daily_remaining_kwh: Record<DayOfWeek, number>;
   fuel_price: number;
   electricity_price: number;
   extra_walk_time: number;
