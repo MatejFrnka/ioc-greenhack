@@ -34,6 +34,17 @@ export interface ChargingStation {
   charge_minutes: number;
 }
 
+export interface PathPoint {
+  lat: number;
+  lng: number;
+}
+
+export interface PathFromHome {
+  distance: number;
+  travel_time?: number;
+  path: PathPoint[];
+}
+
 export interface PlanResponse {
   charging_stations: ChargingStation[];
   weekly_distance: Record<DayOfWeek, number>;
@@ -41,6 +52,7 @@ export interface PlanResponse {
   fuel_price: number;
   electricity_price: number;
   extra_walk_time: number;
+  paths_from_home: PathFromHome[];
   feasible?: boolean;
   reason?: string | null;
 }
@@ -122,6 +134,12 @@ export function pointsToPlanRequest(
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5003";
 
+export const CHARGING_STATION_DC_COLOR = "#16a34a";
+export const CHARGING_STATION_AC_COLOR = "#ca8a04";
+
+/** `[lat, long]` tuples from `/api/stations`. */
+export type StationCoordinate = [number, number];
+
 export async function fetchPlan(
   request: PlanRequest,
   signal?: AbortSignal
@@ -138,6 +156,18 @@ export async function fetchPlan(
   }
 
   return response.json() as Promise<PlanResponse>;
+}
+
+export async function fetchStations(
+  signal?: AbortSignal
+): Promise<StationCoordinate[]> {
+  const response = await fetch(`${API_BASE}/api/stations`, { signal });
+
+  if (!response.ok) {
+    throw new Error(`Stations request failed (${response.status})`);
+  }
+
+  return response.json() as Promise<StationCoordinate[]>;
 }
 
 export function formatVisitDay(day: DayOfWeek | null): string {

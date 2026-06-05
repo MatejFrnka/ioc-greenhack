@@ -1,8 +1,8 @@
 import BatteryChart from "@/components/BatteryChart";
+import CostBarChart from "@/components/CostBarChart";
 import {
   chargingStationKey,
   formatVisitDay,
-  formatWeeklyCzk,
   totalWeeklyKm,
   type PlanResponse,
 } from "@/lib/plan";
@@ -51,24 +51,25 @@ export default function SidebarAnalysis({
       )}
 
       {plan && !planError && (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
-          <PlanStat
-            label="Weekly distance"
-            value={`${totalWeeklyKm(plan.weekly_distance).toFixed(1)} km`}
-          />
-          <PlanStat
-            label="Extra walk"
-            value={`${plan.extra_walk_time} min`}
-          />
-          <PlanStat
-            label="Fuel (week)"
-            value={formatWeeklyCzk(plan.fuel_price)}
-          />
-          <PlanStat
-            label="Electricity (week)"
-            value={formatWeeklyCzk(plan.electricity_price)}
-          />
-        </dl>
+        <div className="flex items-start gap-4">
+          <dl className="flex shrink-0 flex-col gap-3 text-sm">
+            <PlanStat
+              label="Weekly distance"
+              value={`${totalWeeklyKm(plan.weekly_distance).toFixed(1)} km`}
+            />
+            <PlanStat
+              label="Extra walk"
+              value={`${plan.extra_walk_time} min`}
+            />
+          </dl>
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-sm text-zinc-500">Fuel vs electricity</p>
+            <CostBarChart
+              fuel={plan.fuel_price}
+              electricity={plan.electricity_price}
+            />
+          </div>
+        </div>
       )}
 
       {plan && !planError &&
