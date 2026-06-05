@@ -40,3 +40,46 @@ class MockBackend(Backend):
         factor = 1 + (len(locations) * 0.05)
 
         return {day: dist * factor for day, dist in base.items()}
+
+    def get_home(self) -> Location:
+        return Location(
+            lat=50.0756,
+            long=14.437,
+            time_spent=720,
+            visits=[]
+        )
+
+    def get_locations_list(self) -> list[Location]:
+        return [
+            Location(
+                lat=50.0755,
+                long=14.4378,
+                time_spent=480,
+                visits=[
+                    DayOfWeek.MONDAY,
+                    DayOfWeek.TUESDAY,
+                    DayOfWeek.WEDNESDAY,
+                    DayOfWeek.THURSDAY,
+                    DayOfWeek.FRIDAY,
+                ],
+            ),
+            Location(
+                lat=50.0880,
+                long=14.4208,
+                time_spent=60,
+                visits=[DayOfWeek.SATURDAY, DayOfWeek.SUNDAY],
+            ),
+            Location(
+                lat=50.0598,
+                long=14.4466,
+                time_spent=120,
+                visits=[DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY],
+            ),
+            Location(
+                lat=50.1025,
+                long=14.3899,
+                time_spent=30,
+                visits=[DayOfWeek.MONDAY, DayOfWeek.THURSDAY],
+            ),
+        ]
+
