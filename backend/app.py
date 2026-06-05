@@ -1,14 +1,15 @@
-from dataclasses import asdict
-
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from .location import DayOfWeek, Location
-from .mock import MockBackend
+from .concreate import ConcreateBackend
+from .optimizer import optimize, chosen_charging_stations, daily_remaining_kwh
+from .config import (ELECTRICITY_PRICE_CZK_PER_KWH, FUEL_PRICE_CZK_PER_L,
+                     PETROL_L_PER_100KM, EXTRA_WALK_TIME)
 
 app = Flask(__name__)
 CORS(app)
-backend = MockBackend()
+backend = ConcreateBackend()
 
 
 def location_from_json(data: dict) -> Location:
@@ -20,35 +21,33 @@ def location_from_json(data: dict) -> Location:
     )
 
 
-def charging_station_to_dict(station, visit_day: DayOfWeek | None = None) -> dict:
-    data = asdict(station)
-    data["charger_type"] = station.charger_type.name
-    data["visit_day"] = visit_day.name if visit_day is not None else None
-    return data
-
-
-def plan_to_dict(result: dict) -> dict:
-    return {
-        "charging_stations": [
-            charging_station_to_dict(entry["station"], entry.get("visit_day"))
-            for entry in result["charging_stations"]
-        ],
-        "weekly_distance": {
-            day.name: distance for day, distance in result["weekly_distance"].items()
-        },
-        "fuel_price": result["fuel_price"],
-        "electricity_price": result["electricity_price"],
-        "extra_walk_time": result["extra_walk_time"],
-    }
-
-
 @app.post("/api/plan")
 def plan():
     data = request.json
     home = location_from_json(data["home"])
     locations = [location_from_json(loc) for loc in data["locations"]]
-    return jsonify(plan_to_dict(backend.plan(home, locations)))
+
+    result, capacity, weekly_km, weekly_kwh, distances, reason = optimize(
+        backend, home=home, locations=locations
+    )
+
+    # weekly running cost (CZK): the EV's energy vs the same week in a petrol car
+    electricity_weekly_czk = weekly_kwh * ELECTRICITY_PRICE_CZK_PER_KWH
+    fuel_weekly_czk = weekly_km * (PETROL_L_PER_100KM / 100.0) * FUEL_PRICE_CZK_PER_L
+
+    return jsonify({
+        "charging_stations": chosen_charging_stations(result),
+        "weekly_distance": {day.name: km for day, km in distances.items()},
+        "daily_remaining_kwh": {
+            day.name: kwh for day, kwh in daily_remaining_kwh(result, capacity).items()
+        },
+        "fuel_price": round(fuel_weekly_czk),
+        "electricity_price": round(electricity_weekly_czk),
+        "extra_walk_time": EXTRA_WALK_TIME,
+        "feasible": result is not None,
+        "reason": reason,
+    })
 
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    app.run(port=5003, debug=True)

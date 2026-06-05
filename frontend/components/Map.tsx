@@ -11,15 +11,28 @@ import {
 } from "@/lib/map-points";
 import {
   chargingStationKey,
+  DEFAULT_TIME_SPENT_MINUTES,
+  DEFAULT_VISITS,
   fetchPlan,
   formatVisitDay,
   pointsToPlanRequest,
   type ChargingStation,
+  type PlanResponse,
 } from "@/lib/plan";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
-import PlacesSearchBar, {
-  type SelectedPlace,
-} from "@/components/PlacesSearchBar";
+import { createPointActionDialogElement } from "@/components/PointActionDialog";
+import { type SelectedPlace } from "@/components/PlacesSearchBar";
+import ScheduleDialog from "@/components/ScheduleDialog";
+import Sidebar, {
+  type PlacementStage,
+  type SidebarView,
+} from "@/components/Sidebar";
+
+interface ScheduleDraft {
+  lng: number;
+  lat: number;
+  type: PointType;
+}
 
 interface MapProps {
   center?: [number, number];
@@ -29,28 +42,24 @@ interface MapProps {
 const DEFAULT_CENTER: [number, number] = [14.4378, 50.0755];
 const DEFAULT_ZOOM = 11;
 
-function createMarkerElement(type: PointType): HTMLDivElement {
+function createMarkerElement(
+  type: PointType,
+  onClick: (event: MouseEvent) => void
+): HTMLDivElement {
   const { icon, label, color, foreground } = POINT_TYPE_CONFIG[type];
   const el = document.createElement("div");
   el.className =
-    "flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-md";
+    "flex cursor-pointer items-center justify-center rounded-full border-2 border-white p-2.5 shadow-md";
   el.style.backgroundColor = color;
   el.style.color = foreground;
   el.title = label;
+  el.addEventListener("click", onClick);
 
   const iconEl = document.createElement("span");
   iconEl.className = "material-icons text-[15px] leading-none";
   iconEl.textContent = icon;
   el.append(iconEl);
 
-  return el;
-}
-
-function createSearchMarkerElement(name: string): HTMLDivElement {
-  const el = document.createElement("div");
-  el.className =
-    "h-4 w-4 rounded-full border-2 border-white bg-blue-600 shadow-md";
-  el.title = name;
   return el;
 }
 
@@ -61,7 +70,11 @@ function createChargingMarkerElement(station: ChargingStation): HTMLDivElement {
     "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md";
   el.style.backgroundColor = isDc ? "#16a34a" : "#ca8a04";
   el.style.color = "#ffffff";
-  el.title = `${station.charger_kilowatts}kW ${station.charger_type} · ${formatVisitDay(station.visit_day)} · ${station.distance_to_location.toFixed(1)} km`;
+  el.title = `${station.charger_kilowatts}kW ${
+    station.charger_type
+  } · ${formatVisitDay(
+    station.visit_day
+  )} · ${station.distance_to_location.toFixed(1)} km`;
 
   const iconEl = document.createElement("span");
   iconEl.className = "material-icons text-[16px] leading-none";
@@ -78,7 +91,14 @@ export default function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const placementPopupRef = useRef<maplibregl.Popup | null>(null);
-  const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const pointActionPopupRef = useRef<maplibregl.Popup | null>(null);
+  const openPointActionPopupRef = useRef<(point: MapPoint) => void>(() => {});
+  const openPlacementPopupRef = useRef<(lng: number, lat: number) => void>(
+    () => {}
+  );
+  const placementStageRef = useRef<PlacementStage>("home");
+  const sidebarViewRef = useRef<SidebarView>("setup");
+  const addHomePointRef = useRef<(lng: number, lat: number) => void>(() => {});
   const markersRef = useRef(new globalThis.Map<string, maplibregl.Marker>());
   const chargingMarkersRef = useRef(
     new globalThis.Map<string, maplibregl.Marker>()
@@ -86,30 +106,144 @@ export default function Map({
   const initialViewRef = useRef({ center, zoom });
 
   const [points, setPoints] = useState<MapPoint[]>([]);
-  const [chargingStations, setChargingStations] = useState<ChargingStation[]>(
-    []
-  );
+  const [sidebarView, setSidebarView] = useState<SidebarView>("setup");
+  const [placementStage, setPlacementStage] = useState<PlacementStage>("home");
+  const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft | null>(
+    null
+  );
+  const [scheduleScreenPos, setScheduleScreenPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const openScheduleRef = useRef<(draft: ScheduleDraft) => void>(() => {});
+  const planAbortRef = useRef<AbortController | null>(null);
 
-  const handlePlaceSelect = useCallback((place: SelectedPlace) => {
+  const chargingStations = plan?.charging_stations ?? [];
+
+  placementStageRef.current = placementStage;
+  sidebarViewRef.current = sidebarView;
+
+  const addHomePoint = useCallback((lng: number, lat: number) => {
+    setPoints((current) => {
+      const withoutHome = current.filter((point) => point.type !== "home");
+      return [
+        ...withoutHome,
+        {
+          id: crypto.randomUUID(),
+          lng,
+          lat,
+          type: "home",
+          visits: DEFAULT_VISITS.home,
+          timeSpentMinutes: DEFAULT_TIME_SPENT_MINUTES.home,
+        },
+      ];
+    });
+  }, []);
+
+  addHomePointRef.current = addHomePoint;
+
+  const addLocationPoint = useCallback(
+    (
+      lng: number,
+      lat: number,
+      type: PointType,
+      visits: MapPoint["visits"],
+      timeSpentMinutes: number
+    ) => {
+      setPoints((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          lng,
+          lat,
+          type,
+          visits,
+          timeSpentMinutes,
+        },
+      ]);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const hasHome = points.some((point) => point.type === "home");
+    setPlacementStage(hasHome ? "locations" : "home");
+  }, [points]);
+
+  openScheduleRef.current = (draft) => {
+    setScheduleDraft(draft);
+  };
+
+  const updateScheduleScreenPos = useCallback(() => {
+    if (!scheduleDraft || !mapRef.current) return;
+    const point = mapRef.current.project([
+      scheduleDraft.lng,
+      scheduleDraft.lat,
+    ]);
+    setScheduleScreenPos({ x: point.x, y: point.y });
+  }, [scheduleDraft]);
+
+  useEffect(() => {
+    if (!scheduleDraft) {
+      setScheduleScreenPos(null);
+      return;
+    }
+
+    updateScheduleScreenPos();
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    map.on("move", updateScheduleScreenPos);
+    map.on("zoom", updateScheduleScreenPos);
+
+    return () => {
+      map.off("move", updateScheduleScreenPos);
+      map.off("zoom", updateScheduleScreenPos);
+    };
+  }, [scheduleDraft, updateScheduleScreenPos]);
+
+  const removePoint = useCallback((id: string) => {
+    setPoints((current) => current.filter((point) => point.id !== id));
+    pointActionPopupRef.current?.remove();
+    pointActionPopupRef.current = null;
+  }, []);
+
+  const navigateToPoint = useCallback((point: MapPoint) => {
     const map = mapRef.current;
     if (!map) return;
 
     map.flyTo({
-      center: [place.lng, place.lat],
+      center: [point.lng, point.lat],
       zoom: 15,
       essential: true,
     });
-
-    searchMarkerRef.current?.remove();
-    searchMarkerRef.current = new maplibregl.Marker({
-      element: createSearchMarkerElement(place.name),
-      anchor: "center",
-    })
-      .setLngLat([place.lng, place.lat])
-      .addTo(map);
   }, []);
+
+  const handlePlaceSelect = useCallback(
+    (place: SelectedPlace) => {
+      if (sidebarViewRef.current === "analysis") return;
+
+      const map = mapRef.current;
+      if (!map) return;
+
+      map.flyTo({
+        center: [place.lng, place.lat],
+        zoom: 15,
+        essential: true,
+      });
+
+      if (placementStageRef.current === "home") {
+        addHomePoint(place.lng, place.lat);
+      } else {
+        openPlacementPopupRef.current(place.lng, place.lat);
+      }
+    },
+    [addHomePoint]
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -132,10 +266,6 @@ export default function Map({
 
     map.touchPitch.disable();
     map.addControl(
-      new maplibregl.NavigationControl({ showCompass: false }),
-      "top-right"
-    );
-    map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right"
     );
@@ -145,23 +275,40 @@ export default function Map({
       placementPopupRef.current = null;
     };
 
-    const addPoint = (lng: number, lat: number, type: PointType) => {
-      setPoints((current) => {
-        const withoutType = current.filter((point) => point.type !== type);
-        return [
-          ...withoutType,
-          {
-            id: crypto.randomUUID(),
-            lng,
-            lat,
-            type,
-          },
-        ];
-      });
+    const closePointActionPopup = () => {
+      pointActionPopupRef.current?.remove();
+      pointActionPopupRef.current = null;
     };
 
-    const openPlacementPopup = (lngLat: maplibregl.LngLat) => {
+    const openPointActionPopup = (point: MapPoint) => {
       closePlacementPopup();
+      closePointActionPopup();
+
+      const popup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        anchor: "bottom",
+        offset: 12,
+        className: "placement-popup",
+      });
+
+      const content = createPointActionDialogElement({
+        onDelete: () => {
+          removePoint(point.id);
+          closePointActionPopup();
+        },
+        onCancel: closePointActionPopup,
+      });
+
+      popup.setDOMContent(content).setLngLat([point.lng, point.lat]).addTo(map);
+      pointActionPopupRef.current = popup;
+    };
+
+    openPointActionPopupRef.current = openPointActionPopup;
+
+    const openPlacementPopup = (lng: number, lat: number) => {
+      closePlacementPopup();
+      closePointActionPopup();
 
       const popup = new maplibregl.Popup({
         closeButton: false,
@@ -173,26 +320,36 @@ export default function Map({
 
       const content = createPlacementDialogElement({
         onSelect: (type) => {
-          addPoint(lngLat.lng, lngLat.lat, type);
           closePlacementPopup();
+          openScheduleRef.current({ lng, lat, type });
         },
         onCancel: closePlacementPopup,
       });
 
-      popup.setDOMContent(content).setLngLat(lngLat).addTo(map);
+      popup.setDOMContent(content).setLngLat([lng, lat]).addTo(map);
       placementPopupRef.current = popup;
     };
 
+    openPlacementPopupRef.current = openPlacementPopup;
+
     map.on("click", (event) => {
-      openPlacementPopup(event.lngLat);
+      setScheduleDraft(null);
+      if (sidebarViewRef.current === "analysis") return;
+
+      if (placementStageRef.current === "home") {
+        addHomePointRef.current(event.lngLat.lng, event.lngLat.lat);
+      } else {
+        openPlacementPopup(event.lngLat.lng, event.lngLat.lat);
+      }
     });
 
     mapRef.current = map;
 
     return () => {
       closePlacementPopup();
-      searchMarkerRef.current?.remove();
-      searchMarkerRef.current = null;
+      closePointActionPopup();
+      openPointActionPopupRef.current = () => {};
+      openPlacementPopupRef.current = () => {};
       for (const marker of markersRef.current.values()) {
         marker.remove();
       }
@@ -204,28 +361,31 @@ export default function Map({
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [removePoint]);
 
-  useEffect(() => {
+  const analyzePlan = useCallback(() => {
+    planAbortRef.current?.abort();
+
     const request = pointsToPlanRequest(points);
     if (!request) {
-      setChargingStations([]);
+      setPlan(null);
       setPlanError(null);
       setPlanLoading(false);
       return;
     }
 
     const controller = new AbortController();
+    planAbortRef.current = controller;
     setPlanLoading(true);
     setPlanError(null);
 
     fetchPlan(request, controller.signal)
-      .then((plan) => {
-        setChargingStations(plan.charging_stations);
+      .then((response) => {
+        setPlan(response);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setChargingStations([]);
+        setPlan(null);
         setPlanError(
           error instanceof Error ? error.message : "Failed to load plan"
         );
@@ -235,9 +395,28 @@ export default function Map({
           setPlanLoading(false);
         }
       });
-
-    return () => controller.abort();
   }, [points]);
+
+  useEffect(() => {
+    planAbortRef.current?.abort();
+    setPlan(null);
+    setPlanError(null);
+    setPlanLoading(false);
+  }, [points]);
+
+  useEffect(() => {
+    if (sidebarView !== "analysis") return;
+
+    setScheduleDraft(null);
+    placementPopupRef.current?.remove();
+    placementPopupRef.current = null;
+    pointActionPopupRef.current?.remove();
+    pointActionPopupRef.current = null;
+  }, [sidebarView]);
+
+  useEffect(() => {
+    return () => planAbortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -260,7 +439,11 @@ export default function Map({
       }
 
       const marker = new maplibregl.Marker({
-        element: createMarkerElement(point.type),
+        element: createMarkerElement(point.type, (event) => {
+          event.stopPropagation();
+          if (sidebarViewRef.current === "analysis") return;
+          openPointActionPopupRef.current(point);
+        }),
         anchor: "center",
       })
         .setLngLat([point.lng, point.lat])
@@ -306,63 +489,54 @@ export default function Map({
     });
   }, [chargingStations]);
 
-  const showChargingPanel =
-    planLoading || planError !== null || chargingStations.length > 0;
-
   return (
-    <div className="relative h-full w-full">
-      <PlacesSearchBar onPlaceSelect={handlePlaceSelect} />
-      {showChargingPanel && (
-        <div className="absolute bottom-4 left-4 z-10 max-w-xs rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg backdrop-blur-sm">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-zinc-900">
-              Charging stations
-            </h2>
-            {planLoading && (
-              <span className="text-xs text-zinc-500">Loading…</span>
-            )}
-          </div>
-          {planError && (
-            <p className="text-xs text-red-600">{planError}</p>
-          )}
-          {!planError && chargingStations.length === 0 && !planLoading && (
-            <p className="text-xs text-zinc-500">No stations found.</p>
-          )}
-          {!planError && chargingStations.length > 0 && (
-            <ul className="space-y-2">
-              {chargingStations.map((station, index) => (
-                <li
-                  key={chargingStationKey(station, index)}
-                  className="flex items-start gap-2 text-xs text-zinc-700"
-                >
-                  <span
-                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] text-white"
-                    style={{
-                      backgroundColor:
-                        station.charger_type === "DC" ? "#16a34a" : "#ca8a04",
-                    }}
-                  >
-                    <span className="material-icons text-[12px] leading-none">
-                      ev_station
-                    </span>
-                  </span>
-                  <span>
-                    <span className="font-medium text-zinc-900">
-                      {station.charger_kilowatts}kW {station.charger_type}
-                    </span>
-                    <span className="text-zinc-500">
-                      {" "}
-                      · {formatVisitDay(station.visit_day)} ·{" "}
-                      {station.distance_to_location.toFixed(1)} km
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+    <div className="flex h-full w-full bg-zinc-100">
+      <Sidebar
+        view={sidebarView}
+        onViewChange={setSidebarView}
+        points={points}
+        plan={plan}
+        planLoading={planLoading}
+        planError={planError}
+        onAnalyze={analyzePlan}
+        onPlaceSelect={handlePlaceSelect}
+        onNavigate={navigateToPoint}
+        onDelete={removePoint}
+      />
+      <div
+        className="relative min-w-0 flex-1 p-5"
+        style={{ backgroundColor: "white" }}
+      >
+        <div className="relative h-full w-full overflow-hidden rounded-[100px] shadow-md ring-1 ring-zinc-200/80">
+          <div ref={containerRef} className="h-full w-full" />
+
+          {scheduleDraft && scheduleScreenPos && (
+            <div
+              className="pointer-events-none absolute z-20"
+              style={{
+                left: scheduleScreenPos.x,
+                top: scheduleScreenPos.y,
+                transform: "translate(-50%, calc(-100% - 12px))",
+              }}
+            >
+              <ScheduleDialog
+                type={scheduleDraft.type}
+                onConfirm={(visits, hours) => {
+                  addLocationPoint(
+                    scheduleDraft.lng,
+                    scheduleDraft.lat,
+                    scheduleDraft.type,
+                    visits,
+                    Math.round(hours * 60)
+                  );
+                  setScheduleDraft(null);
+                }}
+                onCancel={() => setScheduleDraft(null)}
+              />
+            </div>
           )}
         </div>
-      )}
-      <div ref={containerRef} className="h-full w-full" />
+      </div>
     </div>
   );
 }

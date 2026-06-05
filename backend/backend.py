@@ -14,3 +14,8 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     def charging_stations(self) -> list[tuple[float, float]]:
         pass
+
+    @abc.abstractmethod
+    def distance(self, a: Location, b: Location) -> float:
+        """One-way distance a<->b in km (used for per-leg drive events)."""
+        pass

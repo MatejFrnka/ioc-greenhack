@@ -1,5 +1,5 @@
 import {
-  PLACEMENT_POINT_TYPES,
+  FREQUENT_LOCATION_TYPES,
   POINT_TYPE_CONFIG,
   type PointType,
 } from "@/lib/map-points";
@@ -13,22 +13,18 @@ const ICON_SIZE = 48;
 const ICON_HALF = ICON_SIZE / 2;
 const CENTER_BTN_SIZE = 40;
 const CENTER_BTN_HALF = CENTER_BTN_SIZE / 2;
-const ARC_RADIUS = 84;
+const ARC_RADIUS = 65;
 const ARC_SPAN = (115 * Math.PI) / 180;
 const ARC_CENTER_ANGLE = Math.PI / 2;
 const ARC_START = ARC_CENTER_ANGLE + ARC_SPAN / 2;
-const CENTER_DOWN_OFFSET = 40;
 const CENTER_BTN_OFFSET = 22;
-const PIN_HEIGHT = 18;
-const PIN_GAP = 6;
-const EDGE_PAD = 10;
+const ARC_OFFSET = 35;
 
 const ARC_HALF_WIDTH = ARC_RADIUS * Math.sin(ARC_SPAN / 2);
-const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF + EDGE_PAD);
+const DIALOG_WIDTH = 2 * (ARC_HALF_WIDTH + ICON_HALF);
 const CENTER_X = DIALOG_WIDTH / 2;
-const CENTER_Y = ARC_RADIUS + ICON_HALF + EDGE_PAD + CENTER_DOWN_OFFSET;
-const DIALOG_HEIGHT =
-  CENTER_Y + CENTER_BTN_OFFSET + CENTER_BTN_HALF + PIN_GAP + PIN_HEIGHT;
+const CENTER_Y = ARC_RADIUS + ICON_HALF;
+const DIALOG_HEIGHT = CENTER_Y + CENTER_BTN_HALF;
 
 function createMaterialIcon(name: string): HTMLSpanElement {
   const icon = document.createElement("span");
@@ -69,12 +65,12 @@ export function createPlacementDialogElement({
   const arc = document.createElement("div");
   arc.className = "placement-dialog__arc";
 
-  const count = PLACEMENT_POINT_TYPES.length;
+  const count = FREQUENT_LOCATION_TYPES.length;
   for (let i = 0; i < count; i++) {
-    const type = PLACEMENT_POINT_TYPES[i];
+    const type = FREQUENT_LOCATION_TYPES[i];
     const angle = ARC_START - (i * ARC_SPAN) / (count - 1);
     const x = CENTER_X + ARC_RADIUS * Math.cos(angle);
-    const y = CENTER_Y - ARC_RADIUS * Math.sin(angle);
+    const y = CENTER_Y - ARC_RADIUS * Math.sin(angle) + ARC_OFFSET;
     arc.append(createIconButton(type, x, y, onSelect));
   }
 
@@ -87,11 +83,7 @@ export function createPlacementDialogElement({
   centerButton.append(createMaterialIcon("close"));
   centerButton.addEventListener("click", onCancel);
 
-  const pin = document.createElement("div");
-  pin.className = "placement-dialog__pin";
-  pin.setAttribute("aria-hidden", "true");
-
-  root.append(arc, centerButton, pin);
+  root.append(arc, centerButton);
 
   return root;
 }

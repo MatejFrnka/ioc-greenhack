@@ -1,3 +1,12 @@
+export type DayOfWeek =
+  | "MONDAY"
+  | "TUESDAY"
+  | "WEDNESDAY"
+  | "THURSDAY"
+  | "FRIDAY"
+  | "SATURDAY"
+  | "SUNDAY";
+
 export type PointType =
   | "home"
   | "work"
@@ -10,6 +19,8 @@ export interface MapPoint {
   lng: number;
   lat: number;
   type: PointType;
+  visits: DayOfWeek[];
+  timeSpentMinutes: number;
 }
 
 const ALPHA = 0.9;
@@ -42,7 +53,7 @@ export const POINT_TYPE_CONFIG: Record<
     icon: "school",
     label: "School",
     color: PALETTE.coral,
-    foreground: "#3e363f",
+    foreground: "#ffffff",
   },
   shopping_cart: {
     icon: "shopping_cart",
@@ -61,3 +72,7 @@ export const POINT_TYPE_CONFIG: Record<
 export const PLACEMENT_POINT_TYPES = Object.keys(
   POINT_TYPE_CONFIG
 ) as PointType[];
+
+export const FREQUENT_LOCATION_TYPES = PLACEMENT_POINT_TYPES.filter(
+  (type) => type !== "home"
+);

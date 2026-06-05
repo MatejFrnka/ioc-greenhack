@@ -14,7 +14,7 @@ import math
 import dataclasses
 
 from .location import DayOfWeek
-from .config import (CONSUMPTION_KWH_PER_KM, FLOOR_FRACTION, SIZING_MARGIN,
+from .config import (CONSUMPTION_KWH_PER_KM, FLOOR_FRACTION, END_FRACTION, BATTERY_KWH,
                      SOC_STEP_KWH, SESSION_PENALTY_KM_PER_CHARGE, DETOUR_GROWTH,
                      PRICE_BASE_EUR, PRICE_PER_KW_EUR, COST_CARE)
 
@@ -43,26 +43,39 @@ class Slot:
     dwell_min: int
     detour_km: float
     price: float            # EUR/kWh, derived from charging speed (see config)
+    source: object          # the original ChargingStation (for the API response)
 
 
-def build_events(backend, home, locations, distances):
-    """Chronological list of ('drive', day, kWh) and ('park', day, label, slots)."""
-    # home is parked every day; the other points only on their visit days
-    points = [("Home", home)] + [(f"Stop {i + 1}", loc)
-                                 for i, loc in enumerate(locations)]
+def _slots_at(backend, point, label):
+    """Ways to charge while parked at `point`: one per reachable station."""
+    return [
+        Slot(label, f"{s.charger_type.name}{s.charger_kilowatts}kW",
+             s.charger_kilowatts, point.time_spent,
+             s.distance_to_location, price_per_kwh(s.charger_kilowatts), s)
+        for s in backend.best_charging_stations(point)
+    ]
+
+
+def build_events(backend, home, locations):
+    """Chronological list of ('drive', day, kWh) and ('park', day, label, slots).
+
+    Each visited location is an independent round trip from home:
+        drive out -> PARK at the stop (can charge) -> drive back.
+    Charging happens only while parked at a stop or at home -- never en route --
+    so the destination's own charger is what enables the return leg.
+    """
+    home_slots = _slots_at(backend, home, "Home")
     events = []
     for d in DayOfWeek:
-        events.append(("drive", d, distances[d] * CONSUMPTION_KWH_PER_KM))
-        for label, p in points:
-            if label != "Home" and d not in p.visits:
+        for i, loc in enumerate(locations):
+            if d not in loc.visits:
                 continue
-            slots = [
-                Slot(label, f"{s.charger_type.name}{s.charger_kilowatts}kW",
-                     s.charger_kilowatts, p.time_spent,
-                     s.distance_to_location, price_per_kwh(s.charger_kilowatts))
-                for s in backend.best_charging_stations(p)
-            ]
-            events.append(("park", d, label, slots))
+            leg_kwh = backend.distance(home, loc) * CONSUMPTION_KWH_PER_KM
+            label = f"Stop {i + 1}"
+            events.append(("drive", d, leg_kwh))                       # home -> stop
+            events.append(("park", d, label, _slots_at(backend, loc, label)))
+            events.append(("drive", d, leg_kwh))                       # stop -> home
+        events.append(("park", d, "Home", home_slots))                # end the day home
     return events
 
 
@@ -75,8 +88,9 @@ def _dq(b, cap):
     return min(b * SOC_STEP_KWH, cap)
 
 
-def solve(events, capacity, floor_kwh, care):
-    cap_b = _q(capacity, capacity)          # "full" = the top SoC bucket
+def solve(events, capacity, floor_kwh, end_kwh, care):
+    cap_b = _q(capacity, capacity)          # "full" = the top SoC bucket (start state)
+    end_b = _q(end_kwh, capacity)           # required SoC at the end of the week
     dp = {(cap_b, 0): 0.0}                   # state -> best cost so far
     back = {(0, cap_b, 0): None}            # for reconstructing the plan
 
@@ -111,15 +125,15 @@ def solve(events, capacity, floor_kwh, care):
                     money = fill * s.price
                     edge = detour_cost(s.detour_km) + care * money
                     act = ("charge", day, label, s.station, fill,
-                           fill / s.speed_kw * 60.0, s.detour_km, money)
+                           fill / s.speed_kw * 60.0, s.detour_km, money, s.source)
                     relax((b2, k + 1), cost + edge, act)
 
         dp = ndp
 
-    # must end full; add the convex session penalty once, at the end
+    # must end at >= END_FRACTION; add the convex session penalty once, at the end
     best = None
     for (soc_b, k), cost in dp.items():
-        if soc_b != cap_b:
+        if soc_b < end_b:
             continue
         total = cost + session_penalty(k)
         if best is None or total < best[0]:
@@ -137,20 +151,136 @@ def solve(events, capacity, floor_kwh, care):
     return {"sessions": k, "actions": actions, "care": care}
 
 
-def optimize(backend, care=COST_CARE):
-    """Run the full pipeline; returns (plan, capacity, weekly_km, weekly_kwh)."""
-    home = backend.get_home()
-    locations = backend.get_locations_list()
+def infeasible_reason(backend, home, locations, capacity):
+    """A human-readable explanation for why no plan exists (charging only at stops)."""
+    usable_kwh = capacity * (1.0 - FLOOR_FRACTION)
+    usable_km = usable_kwh / CONSUMPTION_KWH_PER_KM
+    floor_pct = int(FLOOR_FRACTION * 100)
+    for i, loc in enumerate(locations):
+        oneway_km = backend.distance(home, loc)
+        oneway_kwh = oneway_km * CONSUMPTION_KWH_PER_KM
+        if oneway_kwh > usable_kwh + 1e-9:
+            return (f"Stop {i + 1} is {oneway_km:.0f} km away: one leg needs "
+                    f"{oneway_kwh:.0f} kWh, but only {usable_kwh:.0f} kWh "
+                    f"({usable_km:.0f} km) is usable above the {floor_pct}% floor. "
+                    f"Out of range without en-route charging.")
+        if not backend.best_charging_stations(loc) and 2 * oneway_kwh > usable_kwh + 1e-9:
+            return (f"Stop {i + 1} is {oneway_km:.0f} km away and has no charger "
+                    f"nearby, so the battery can't be refilled for the "
+                    f"{2 * oneway_km:.0f} km round trip "
+                    f"(only {usable_km:.0f} km usable above the floor).")
+    return ("Couldn't keep the battery above the floor on some leg, with charging "
+            "only at the stops.")
+
+
+def end_of_week_charge(backend, home, locations, capacity, weekly_kwh):
+    """Recommend a single charge for a week so light the car never had to charge.
+
+    Picks the best reachable station, preferring home (charge on Sunday night),
+    and tops the battery back toward full. Returns a 'charge' action, or None if
+    no station is reachable anywhere.
+    """
+    end_day = list(DayOfWeek)[-1]            # Sunday = end of the week
+    candidates = [(home, "Home")] + [(loc, f"Stop {i + 1}")
+                                     for i, loc in enumerate(locations)]
+    for point, label in candidates:
+        stations = backend.best_charging_stations(point)
+        if not stations:
+            continue
+        s = stations[0]                      # best by the backend's ordering
+        fill = min(weekly_kwh, s.charger_kilowatts * point.time_spent / 60.0, capacity)
+        money = fill * price_per_kwh(s.charger_kilowatts)
+        return ("charge", end_day, label,
+                f"{s.charger_type.name}{s.charger_kilowatts}kW", fill,
+                fill / s.charger_kilowatts * 60.0, s.distance_to_location, money, s)
+    return None
+
+
+def optimize(backend, home=None, locations=None, care=COST_CARE):
+    """Run the full pipeline.
+
+    Returns (plan, capacity, weekly_km, weekly_kwh, distances, reason). `distances`
+    is the per-day {DayOfWeek: km} the API exposes as weekly_distance; `reason` is
+    None when feasible, else a human-readable cause.
+
+    home/locations default to the backend's own data (handy for the CLI); the
+    API passes the user's placed points instead.
+    """
+    if home is None:
+        home = backend.get_home()
+    if locations is None:
+        locations = backend.get_locations_list()
     distances = backend.estimate_distance(home, locations)
 
     weekly_km = sum(distances.values())
     weekly_kwh = weekly_km * CONSUMPTION_KWH_PER_KM
-    capacity = weekly_kwh / (1.0 - FLOOR_FRACTION) * (1.0 + SIZING_MARGIN)
+    capacity = float(BATTERY_KWH)        # real pack; the floor below now binds
     floor_kwh = FLOOR_FRACTION * capacity
+    end_kwh = END_FRACTION * capacity     # required level at the end of the week
 
-    events = build_events(backend, home, locations, distances)
-    plan = solve(events, capacity, floor_kwh, float(care))
-    return plan, capacity, weekly_km, weekly_kwh
+    events = build_events(backend, home, locations)
+    plan = solve(events, capacity, floor_kwh, end_kwh, float(care))
+    reason = None if plan is not None else infeasible_reason(
+        backend, home, locations, capacity)
+
+    # Light week: the car never had to charge -> still recommend one charge at week's end.
+    if plan is not None and not any(a[0] == "charge" for a in plan["actions"]):
+        extra = end_of_week_charge(backend, home, locations, capacity, weekly_kwh)
+        if extra is not None:
+            plan["actions"].append(extra)
+            plan["sessions"] = 1
+
+    return plan, capacity, weekly_km, weekly_kwh, distances, reason
+
+
+def chosen_charging_stations(plan):
+    """The stations the optimizer actually picked, in the frontend's shape:
+    one entry per charging session, tagged with the day it happens."""
+    if plan is None:
+        return []
+    stations = []
+    for a in plan["actions"]:
+        if a[0] != "charge":
+            continue
+        day, fill, duration, source = a[1], a[4], a[5], a[8]
+        stations.append({
+            "lat": source.lat,
+            "long": source.long,
+            "charger_type": source.charger_type.name,
+            "charger_kilowatts": source.charger_kilowatts,
+            "distance_to_location": source.distance_to_location,
+            "visit_day": day.name,
+            "charged_kwh": round(fill, 2),       # how much energy this session adds
+            "charge_minutes": round(duration, 1),
+        })
+    print(stations)
+    return stations
+
+
+def daily_remaining_kwh(plan, capacity):
+    """Battery left (kWh) at the END of each day, replaying the plan from full.
+
+    Drives subtract, charges add; days with no events carry the previous level
+    forward. Returns {DayOfWeek: kWh} for the whole week.
+    """
+    if plan is None:
+        return {}
+    end_of_day = {}
+    soc = capacity                       # the week starts at a full battery
+    for a in plan["actions"]:
+        if a[0] == "drive":
+            soc -= a[2]
+        elif a[0] == "charge":
+            soc += a[4]
+        else:
+            continue                     # 'idle' parks don't change the level
+        end_of_day[a[1]] = soc           # last write of a day = its end-of-day level
+
+    remaining, prev = {}, capacity
+    for d in DayOfWeek:
+        prev = end_of_day.get(d, prev)
+        remaining[d] = round(prev, 1)
+    return remaining
 
 
 def report(plan, capacity, weekly_km, weekly_kwh):
@@ -165,7 +295,7 @@ def report(plan, capacity, weekly_km, weekly_kwh):
     for a in plan["actions"]:
         if a[0] != "charge":
             continue
-        _, day, label, station, fill, dur, det, eur = a
+        _, day, label, station, fill, dur, det, eur, _src = a
         detour_km += det
         detour_pen += detour_cost(det)
         money += eur

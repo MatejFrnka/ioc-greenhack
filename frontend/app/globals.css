@@ -8,14 +8,15 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: #95e06c;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff;
+    --foreground: #171717;
   }
 }
 
@@ -84,7 +85,6 @@ body {
 
 .placement-dialog__center-btn:hover {
   transform: translate(-50%, -50%) scale(1.06);
-  background: #297373;
 }
 
 .placement-dialog__icon-glyph {
@@ -96,16 +96,56 @@ body {
   font-size: 1.125rem;
 }
 
-.placement-dialog__pin {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 14px;
-  height: 18px;
-  transform: translateX(-50%);
+.point-action-dialog {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.875rem;
   background: #ffffff;
-  clip-path: polygon(50% 100%, 0 0, 100% 0);
-  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.15));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  pointer-events: auto;
+}
+
+.point-action-dialog__delete-btn,
+.point-action-dialog__cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.point-action-dialog__delete-btn {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.point-action-dialog__delete-btn:hover {
+  transform: scale(1.06);
+  background: #fecaca;
+}
+
+.point-action-dialog__cancel-btn {
+  background: #f4f4f5;
+  color: #52525b;
+}
+
+.point-action-dialog__cancel-btn:hover {
+  transform: scale(1.06);
+  background: #e4e4e7;
+}
+
+.point-action-dialog__icon-glyph {
+  font-size: 1.125rem;
+  line-height: 1;
 }
 
 .pac-container {

@@ -1,13 +1,6 @@
-import type { MapPoint, PointType } from "@/lib/map-points";
+import type { DayOfWeek, MapPoint, PointType } from "@/lib/map-points";
 
-export type DayOfWeek =
-  | "MONDAY"
-  | "TUESDAY"
-  | "WEDNESDAY"
-  | "THURSDAY"
-  | "FRIDAY"
-  | "SATURDAY"
-  | "SUNDAY";
+export type { DayOfWeek };
 
 export interface PlanLocation {
   lat: number;
@@ -28,15 +21,40 @@ export interface ChargingStation {
   charger_kilowatts: number;
   distance_to_location: number;
   visit_day: DayOfWeek | null;
+  charged_kwh: number;
+  charge_minutes: number;
 }
 
 export interface PlanResponse {
   charging_stations: ChargingStation[];
   weekly_distance: Record<DayOfWeek, number>;
+  daily_remaining_kwh: Record<DayOfWeek, number>;
   fuel_price: number;
   electricity_price: number;
   extra_walk_time: number;
+  feasible?: boolean;
+  reason?: string | null;
 }
+
+export const ALL_DAYS: DayOfWeek[] = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+];
+
+export const DAY_SHORT_LABELS: Record<DayOfWeek, string> = {
+  MONDAY: "Mon",
+  TUESDAY: "Tue",
+  WEDNESDAY: "Wed",
+  THURSDAY: "Thu",
+  FRIDAY: "Fri",
+  SATURDAY: "Sat",
+  SUNDAY: "Sun",
+};
 
 const WEEKDAYS: DayOfWeek[] = [
   "MONDAY",
@@ -48,7 +66,7 @@ const WEEKDAYS: DayOfWeek[] = [
 
 const WEEKEND: DayOfWeek[] = ["SATURDAY", "SUNDAY"];
 
-const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
+export const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
   home: [],
   work: WEEKDAYS,
   school: WEEKDAYS,
@@ -56,20 +74,24 @@ const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
   question_mark: ["WEDNESDAY"],
 };
 
-const DEFAULT_TIME_SPENT: Record<PointType, number> = {
+export const DEFAULT_TIME_SPENT_MINUTES: Record<PointType, number> = {
   home: 720,
   work: 480,
-  school: 360,
+  school: 30,
   shopping_cart: 60,
   question_mark: 120,
 };
+
+export function defaultHoursForType(type: PointType): number {
+  return DEFAULT_TIME_SPENT_MINUTES[type] / 60;
+}
 
 function pointToLocation(point: MapPoint): PlanLocation {
   return {
     lat: point.lat,
     long: point.lng,
-    time_spent: DEFAULT_TIME_SPENT[point.type],
-    visits: DEFAULT_VISITS[point.type],
+    time_spent: point.timeSpentMinutes,
+    visits: point.visits,
   };
 }
 
@@ -85,7 +107,7 @@ export function pointsToPlanRequest(points: MapPoint[]): PlanRequest | null {
   };
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5003";
 
 export async function fetchPlan(
   request: PlanRequest,
@@ -112,4 +134,20 @@ export function formatVisitDay(day: DayOfWeek | null): string {
 
 export function chargingStationKey(station: ChargingStation, index: number): string {
   return `${station.lat},${station.long},${station.charger_kilowatts},${index}`;
+}
+
+export function totalWeeklyKm(
+  weeklyDistance: Record<DayOfWeek, number>
+): number {
+  return Object.values(weeklyDistance).reduce((sum, distance) => sum + distance, 0);
+}
+
+const czkFormatter = new Intl.NumberFormat("cs-CZ", {
+  style: "currency",
+  currency: "CZK",
+  maximumFractionDigits: 0,
+});
+
+export function formatWeeklyCzk(amount: number): string {
+  return `${czkFormatter.format(amount)}/week`;
 }
