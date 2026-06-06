@@ -47,10 +47,18 @@ export interface PathFromHome {
   path: PathPoint[];
 }
 
+export interface SocPoint {
+  index: number;
+  day: DayOfWeek;
+  kwh: number;
+  kind: "start" | "drive" | "charge";
+}
+
 export interface PlanResponse {
   charging_stations: ChargingStation[];
   weekly_distance: Record<DayOfWeek, number>;
   daily_peak_kwh: Record<DayOfWeek, number>;
+  soc_trajectory: SocPoint[];
   fuel_price: number;
   electricity_price: number;
   extra_walk_time: number;

@@ -3,7 +3,7 @@ from flask_cors import CORS
 
 from .location import DayOfWeek, Location
 from .concreate import ConcreateBackend
-from .optimizer import optimize, chosen_charging_stations, daily_peak_kwh
+from .optimizer import optimize, chosen_charging_stations, daily_peak_kwh, soc_trajectory
 from .config import (ELECTRICITY_PRICE_CZK_PER_KWH, FUEL_PRICE_CZK_PER_L,
                      PETROL_L_PER_100KM, WALK_SPEED_KMPH)
 
@@ -46,6 +46,7 @@ def solution(home, locations, battery_kwh):
         "daily_peak_kwh": {
             day.name: kwh for day, kwh in daily_peak_kwh(result, capacity).items()
         },
+        "soc_trajectory": soc_trajectory(result, capacity),
         "fuel_price": round(fuel_weekly_czk),
         "electricity_price": round(electricity_weekly_czk),
         "extra_walk_time": extra_walk_time,

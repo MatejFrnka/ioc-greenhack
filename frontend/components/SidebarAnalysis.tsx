@@ -118,16 +118,14 @@ export default function SidebarAnalysis({
         </div>
       )}
 
-      {plan &&
-        !planError &&
-        Object.keys(plan.daily_peak_kwh ?? {}).length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-900">
-              Peak battery by day
-            </h3>
-            <BatteryChart dailyPeak={plan.daily_peak_kwh} />
-          </div>
-        )}
+      {plan && !planError && (plan.soc_trajectory ?? []).length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-900">
+            Battery level over the week
+          </h3>
+          <BatteryChart trajectory={plan.soc_trajectory} />
+        </div>
+      )}
 
       {plan && !planError && plan.charging_stations.length > 0 && (
         <div>

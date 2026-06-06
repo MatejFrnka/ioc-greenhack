@@ -286,6 +286,29 @@ def daily_peak_kwh(plan, capacity):
     return peak
 
 
+def soc_trajectory(plan, capacity):
+    """Battery level (kWh) after every drive/charge event, replaying from full.
+
+    Unlike daily_peak_kwh (one point per day), this keeps the whole week's curve:
+    each drive dips the level, each charge raises it. Returns an ordered list of
+    {index, day, kwh, kind} so the UI can plot every point of charge.
+    """
+    if plan is None:
+        return []
+    events = [a for a in plan["actions"] if a[0] in ("drive", "charge")]
+    first_day = (events[0][1] if events else list(DayOfWeek)[0]).name
+    soc = capacity                           # the week starts at a full battery
+    points = [{"index": 0, "day": first_day, "kwh": round(soc, 1), "kind": "start"}]
+    for i, a in enumerate(events, start=1):
+        if a[0] == "drive":
+            soc -= a[2]
+        else:
+            soc = min(soc + a[4], capacity)  # can't charge past 100%
+        points.append({"index": i, "day": a[1].name,
+                        "kwh": round(soc, 1), "kind": a[0]})
+    return points
+
+
 def report(plan, capacity, weekly_km, weekly_kwh):
     print("EV weekly charging plan")
     print(f"  weekly {weekly_km:.0f} km / {weekly_kwh:.1f} kWh   "
