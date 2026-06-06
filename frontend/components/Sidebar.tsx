@@ -3,6 +3,7 @@ import SidebarAnalysis from "@/components/SidebarAnalysis";
 import SidebarSetup from "@/components/SidebarSetup";
 import { type MapPoint } from "@/lib/map-points";
 import { type PlanResponse } from "@/lib/plan";
+import { cn } from "@/lib/utils";
 
 export type PlacementStage = "home" | "locations";
 export type SidebarView = "setup" | "analysis";
@@ -21,6 +22,7 @@ interface SidebarProps {
   onHoverChargingStation: (key: string | null) => void;
   batteryCapacity: number;
   onBatteryCapacityChange: (kwh: number) => void;
+  className?: string;
 }
 
 export default function Sidebar({
@@ -37,14 +39,20 @@ export default function Sidebar({
   onHoverChargingStation,
   batteryCapacity,
   onBatteryCapacityChange,
+  className,
 }: SidebarProps) {
   const hasHome = points.some((point) => point.type === "home");
 
   return (
-    <aside className="flex h-full w-96 shrink-0 flex-col bg-white">
+    <aside
+      className={cn(
+        "flex h-full w-96 shrink-0 flex-col bg-white",
+        className
+      )}
+    >
       <div className="shrink-0 px-8 pt-6">
         <h1>
-          <img src="/logo.png" alt="Evify" className="h-20 w-auto" />
+          <img src="/logo.png" alt="Evify" className="h-12 w-auto" />
         </h1>
       </div>
 

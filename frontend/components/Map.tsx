@@ -37,6 +37,9 @@ import Sidebar, {
   type PlacementStage,
   type SidebarView,
 } from "@/components/Sidebar";
+import { cn } from "@/lib/utils";
+
+type MobileView = "panel" | "map";
 
 interface MapProps {
   center?: [number, number];
@@ -529,6 +532,7 @@ export default function Map({
 
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [sidebarView, setSidebarView] = useState<SidebarView>("setup");
+  const [mobileView, setMobileView] = useState<MobileView>("panel");
   const [placementStage, setPlacementStage] = useState<PlacementStage>("home");
   const [allStations, setAllStations] = useState<StationCoordinate[]>([]);
   const [plans, setPlans] = useState<PlanResponseByCapacity | null>(null);
@@ -1083,9 +1087,20 @@ export default function Map({
     );
   }, [points, chargingStations, stationsInRange, sidebarView, highlightedChargingKey]);
 
+  useEffect(() => {
+    if (mobileView !== "map") return;
+    const map = mapRef.current;
+    if (!map) return;
+    requestAnimationFrame(() => map.resize());
+  }, [mobileView]);
+
   return (
-    <div className="flex h-full w-full bg-zinc-100">
+    <div className="relative flex h-full w-full bg-zinc-100">
       <Sidebar
+        className={cn(
+          "w-full md:w-96",
+          mobileView === "map" ? "hidden md:flex" : "flex"
+        )}
         view={sidebarView}
         onViewChange={setSidebarView}
         points={points}
@@ -1101,13 +1116,28 @@ export default function Map({
         onBatteryCapacityChange={setBatteryCapacity}
       />
       <div
-        className="relative min-w-0 flex-1 p-5"
-        style={{ backgroundColor: "white" }}
+        className={cn(
+          "relative min-w-0 flex-1 bg-white p-0 md:p-5",
+          mobileView === "panel" ? "hidden md:block" : "block"
+        )}
       >
-        <div className="relative h-full w-full overflow-hidden rounded-[100px] shadow-md ring-1 ring-zinc-200/80">
+        <div className="relative h-full w-full overflow-hidden md:rounded-[100px] md:shadow-md md:ring-1 md:ring-zinc-200/80">
           <div ref={containerRef} className="h-full w-full" />
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          setMobileView((view) => (view === "panel" ? "map" : "panel"))
+        }
+        className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-zinc-900 shadow-lg md:hidden"
+      >
+        <span className="material-icons text-[20px] leading-none">
+          {mobileView === "panel" ? "map" : "view_sidebar"}
+        </span>
+        {mobileView === "panel" ? "Map" : "Panel"}
+      </button>
     </div>
   );
 }
