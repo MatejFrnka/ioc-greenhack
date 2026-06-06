@@ -53,6 +53,10 @@ const STATION_PATHS_SOURCE_ID = "paths-from-stations";
 const STATION_PATHS_LAYER_ID = "paths-from-stations-lines";
 const STATION_PATHS_COLOR = "#64748b";
 const PRIMARY_COLOR = "#95e06c";
+const MARKER_Z_LOCATION = 30;
+const MARKER_Z_CHARGING_HIGHLIGHT = 25;
+const MARKER_Z_CHARGING_PRIMARY = 20;
+const MARKER_Z_CHARGING_SECONDARY = 10;
 const PATHS_LINE_WIDTH: maplibregl.ExpressionSpecification = [
   "interpolate",
   ["linear"],
@@ -415,6 +419,37 @@ function updateAllStationsLayer(
       "circle-opacity": 1,
     },
   });
+}
+
+function applyMarkerZIndex(marker: maplibregl.Marker, zIndex: number) {
+  const wrapper = marker.getElement().closest(".maplibregl-marker");
+  if (wrapper instanceof HTMLElement) {
+    wrapper.style.zIndex = String(zIndex);
+  }
+}
+
+function syncMarkerLayerOrder(
+  locationMarkers: globalThis.Map<string, maplibregl.Marker>,
+  chargingMarkers: globalThis.Map<string, maplibregl.Marker>,
+  inRangeMarkers: globalThis.Map<string, maplibregl.Marker>,
+  highlightedChargingKey: string | null
+) {
+  for (const marker of inRangeMarkers.values()) {
+    applyMarkerZIndex(marker, MARKER_Z_CHARGING_SECONDARY);
+  }
+
+  for (const [id, marker] of chargingMarkers.entries()) {
+    applyMarkerZIndex(
+      marker,
+      id === highlightedChargingKey
+        ? MARKER_Z_CHARGING_HIGHLIGHT
+        : MARKER_Z_CHARGING_PRIMARY
+    );
+  }
+
+  for (const marker of locationMarkers.values()) {
+    applyMarkerZIndex(marker, MARKER_Z_LOCATION);
+  }
 }
 
 function createMarkerElement(
@@ -861,14 +896,20 @@ export default function Map({
       if (sidebarView !== "analysis") {
         removeAllPathLayers(map);
         clearStationsInRangeMarkers(stationsInRangeMarkersRef.current);
-        return;
+      } else {
+        syncPathLayers(map, pathsFromHome, pathsFromStations, locationPoints);
+        syncStationsInRangeMarkers(
+          map,
+          stationsInRangeMarkersRef.current,
+          stationsInRange,
+          chargingStations
+        );
       }
-      syncPathLayers(map, pathsFromHome, pathsFromStations, locationPoints);
-      syncStationsInRangeMarkers(
-        map,
+      syncMarkerLayerOrder(
+        markersRef.current,
+        chargingMarkersRef.current,
         stationsInRangeMarkersRef.current,
-        stationsInRange,
-        chargingStations
+        highlightedChargingKey
       );
     };
 
@@ -884,6 +925,7 @@ export default function Map({
     chargingStations,
     points,
     sidebarView,
+    highlightedChargingKey,
   ]);
 
   const analyzePlan = useCallback(() => {
@@ -1028,11 +1070,18 @@ export default function Map({
   useEffect(() => {
     for (const [id, marker] of chargingMarkersRef.current.entries()) {
       const el = marker.getElement();
-      const active = id === highlightedChargingKey;
-      el.classList.toggle("charging-marker--active", active);
-      el.style.zIndex = active ? "10" : "";
+      el.classList.toggle("charging-marker--active", id === highlightedChargingKey);
     }
   }, [highlightedChargingKey, chargingStations]);
+
+  useEffect(() => {
+    syncMarkerLayerOrder(
+      markersRef.current,
+      chargingMarkersRef.current,
+      stationsInRangeMarkersRef.current,
+      highlightedChargingKey
+    );
+  }, [points, chargingStations, stationsInRange, sidebarView, highlightedChargingKey]);
 
   return (
     <div className="flex h-full w-full bg-zinc-100">
