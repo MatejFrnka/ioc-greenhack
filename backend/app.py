@@ -31,6 +31,7 @@ def charging_stations(sts: list[ChargingStation]):
             'charger_kilowatts': s.charger_kilowatts,
             'distance_to_location': s.distance_to_location,
         })
+    return result
 
 
 def solution(home, locations, battery_kwh):
