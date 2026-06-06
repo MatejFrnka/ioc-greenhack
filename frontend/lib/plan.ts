@@ -113,6 +113,13 @@ const WEEKDAYS: DayOfWeek[] = [
 
 const WEEKEND: DayOfWeek[] = ["SATURDAY", "SUNDAY"];
 
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5003";
+
+function apiUrl(path: string): string {
+  return `${BACKEND_URL.replace(/\/$/, "")}${path}`;
+}
+
 export const DEFAULT_VISITS: Record<PointType, DayOfWeek[]> = {
   home: [],
   work: WEEKDAYS,
@@ -164,14 +171,14 @@ export function planForBatteryCapacity(
 export const CHARGING_STATION_DC_COLOR = "#16a34a";
 export const CHARGING_STATION_AC_COLOR = "#ca8a04";
 
-/** `[lat, long]` tuples from `/api/stations`. */
+/** `[lat, long]` tuples from the stations API. */
 export type StationCoordinate = [number, number];
 
 export async function fetchPlan(
   request: PlanRequest,
   signal?: AbortSignal
 ): Promise<PlanResponseByCapacity> {
-  const response = await fetch("/api/plan", {
+  const response = await fetch(apiUrl("/api/plan"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -188,7 +195,7 @@ export async function fetchPlan(
 export async function fetchStations(
   signal?: AbortSignal
 ): Promise<StationCoordinate[]> {
-  const response = await fetch("/api/stations", { signal });
+  const response = await fetch(apiUrl("/api/stations"), { signal });
 
   if (!response.ok) {
     throw new Error(`Stations request failed (${response.status})`);
