@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from .location import DayOfWeek, Location
+from .location import DayOfWeek, Location, ChargingStation, ChargerType
 from .concreate import ConcreateBackend
 from .optimizer import optimize, chosen_charging_stations, daily_peak_kwh, soc_trajectory
 from .config import (ELECTRICITY_PRICE_CZK_PER_KWH, FUEL_PRICE_CZK_PER_L,
@@ -19,6 +19,18 @@ def location_from_json(data: dict) -> Location:
         time_spent=data["time_spent"],
         visits=[DayOfWeek[day] for day in data.get("visits", [])],
     )
+
+
+def charging_stations(sts: list[ChargingStation]):
+    result = []
+    for s in sts:
+        result.append({
+            'lat': s.lat,
+            'long': s.long,
+            'charger_type': 'AC' if s.charger_type == ChargerType.AC else ('DC' if s.charger_type == ChargerType.DC else 'UNKNOWN'),
+            'charger_kilowatts': s.charger_kilowatts,
+            'distance_to_location': s.distance_to_location,
+        })
 
 
 def solution(home, locations, battery_kwh):
@@ -58,7 +70,7 @@ def solution(home, locations, battery_kwh):
         "reason": reason,
         "paths_from_home": [backend.drive_path(home, loc) for loc in locations],
         "paths_from_stations": [backend.walking_path(s['location_from'], (s['lat'], s['long'])) for s in stations],
-        "stations_in_range": stations_in_range,
+        "stations_in_range": charging_stations(stations_in_range),
     }
 
 
