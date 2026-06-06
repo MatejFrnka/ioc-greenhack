@@ -12,20 +12,23 @@ import {
 } from "@/lib/map-points";
 import {
   CHARGING_STATION_AC_COLOR,
-  CHARGING_STATION_DC_COLOR,
   chargingStationKey,
+  dedupeStationsInRange,
   DEFAULT_BATTERY_KWH,
   DEFAULT_TIME_SPENT_MINUTES,
   DEFAULT_VISITS,
   fetchPlan,
   fetchStations,
+  formatStationInRangeDistance,
   formatVisitDay,
   planForBatteryCapacity,
   pointsToPlanRequest,
+  stationInRangeKey,
   type ChargingStation,
   type PathFromHome,
   type PlanResponseByCapacity,
   type StationCoordinate,
+  type StationInRange,
 } from "@/lib/plan";
 import { createPlacementDialogElement } from "@/components/PlacementDialog";
 import { createScheduleDialogElement } from "@/components/ScheduleDialog";
@@ -76,7 +79,6 @@ const ALL_STATIONS_CIRCLE_RADIUS: maplibregl.ExpressionSpecification = [
   17,
   10,
 ];
-
 function stationsToGeoJSON(
   stations: StationCoordinate[]
 ): GeoJSON.FeatureCollection {
@@ -280,6 +282,106 @@ function syncPathLayers(
   updatePathsFromStationsLayer(map, pathsFromStations);
 }
 
+function isSameStationLocation(
+  a: { lat: number; long: number },
+  b: { lat: number; long: number }
+): boolean {
+  return Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.long - b.long) < 1e-5;
+}
+
+function filterStationsInRange(
+  inRange: StationInRange[],
+  selected: ChargingStation[]
+): StationInRange[] {
+  return dedupeStationsInRange(inRange).filter(
+    (station) =>
+      !selected.some((chosen) => isSameStationLocation(station, chosen))
+  );
+}
+
+function stationInRangeHoverHtml(station: StationInRange): string {
+  return `<div class="station-hover-tooltip">
+    <div class="station-hover-tooltip__title">${station.charger_kilowatts} kW ${station.charger_type}</div>
+    <div class="station-hover-tooltip__meta">${formatStationInRangeDistance(station.distance_to_location)} away</div>
+  </div>`;
+}
+
+function selectedChargingStationHoverHtml(station: ChargingStation): string {
+  return `<div class="station-hover-tooltip">
+    <div class="station-hover-tooltip__title">${station.charger_kilowatts} kW ${station.charger_type}</div>
+    <div class="station-hover-tooltip__meta">${formatVisitDay(station.visit_day)} · ${station.charged_kwh.toFixed(1)} kWh · ${station.distance_to_location.toFixed(1)} km away</div>
+  </div>`;
+}
+
+function attachMarkerHoverPopup(
+  map: maplibregl.Map,
+  element: HTMLElement,
+  lngLat: [number, number],
+  html: string
+) {
+  const popup = new maplibregl.Popup({
+    closeButton: false,
+    closeOnClick: false,
+    className: "station-hover-popup",
+    offset: 12,
+  });
+
+  element.addEventListener("mouseenter", () => {
+    popup.setLngLat(lngLat).setHTML(html).addTo(map);
+  });
+  element.addEventListener("mouseleave", () => popup.remove());
+}
+
+function clearStationsInRangeMarkers(
+  markers: globalThis.Map<string, maplibregl.Marker>
+) {
+  for (const marker of markers.values()) {
+    marker.remove();
+  }
+  markers.clear();
+}
+
+function syncStationsInRangeMarkers(
+  map: maplibregl.Map,
+  markers: globalThis.Map<string, maplibregl.Marker>,
+  stations: StationInRange[],
+  selectedStations: ChargingStation[]
+) {
+  const visible = filterStationsInRange(stations, selectedStations);
+  const activeIds = new Set(
+    visible.map((station, index) => stationInRangeKey(station, index))
+  );
+
+  for (const [id, marker] of markers.entries()) {
+    if (!activeIds.has(id)) {
+      marker.remove();
+      markers.delete(id);
+    }
+  }
+
+  visible.forEach((station, index) => {
+    const id = stationInRangeKey(station, index);
+    const lngLat: [number, number] = [station.long, station.lat];
+    const existing = markers.get(id);
+    if (existing) {
+      existing.setLngLat(lngLat);
+      return;
+    }
+
+    const element = createChargingMarkerElement({
+      color: CHARGING_STATION_AC_COLOR,
+      foreground: "#ffffff",
+      title: `${station.charger_kilowatts} kW ${station.charger_type} · ${formatStationInRangeDistance(station.distance_to_location)} away`,
+    });
+    attachMarkerHoverPopup(map, element, lngLat, stationInRangeHoverHtml(station));
+
+    const marker = new maplibregl.Marker({ element, anchor: "center" })
+      .setLngLat(lngLat)
+      .addTo(map);
+    markers.set(id, marker);
+  });
+}
+
 function updateAllStationsLayer(
   map: maplibregl.Map,
   stations: StationCoordinate[]
@@ -336,28 +438,21 @@ function createMarkerElement(
   return el;
 }
 
-function createChargingMarkerElement(station: ChargingStation): HTMLDivElement {
-  const isDc = station.charger_type === "DC";
-  // Outer element is positioned by MapLibre; the inner badge is what we scale.
+function createChargingMarkerElement(options: {
+  color: string;
+  foreground?: string;
+  title: string;
+}): HTMLDivElement {
+  const foreground = options.foreground ?? "#ffffff";
   const el = document.createElement("div");
   el.className = "charging-marker";
-  el.className =
-    "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md";
-  el.style.backgroundColor = isDc
-    ? CHARGING_STATION_DC_COLOR
-    : CHARGING_STATION_AC_COLOR;
-  el.style.color = "#ffffff";
-  el.title = `${station.charger_kilowatts}kW ${
-    station.charger_type
-  } · ${formatVisitDay(
-    station.visit_day
-  )} · ${station.distance_to_location.toFixed(1)} km`;
+  el.title = options.title;
 
   const badge = document.createElement("div");
   badge.className =
     "charging-marker__badge flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md";
-  badge.style.backgroundColor = isDc ? "#16a34a" : "#ca8a04";
-  badge.style.color = "#ffffff";
+  badge.style.backgroundColor = options.color;
+  badge.style.color = foreground;
 
   const iconEl = document.createElement("span");
   iconEl.className = "material-icons text-[16px] leading-none";
@@ -390,6 +485,9 @@ export default function Map({
   const chargingMarkersRef = useRef(
     new globalThis.Map<string, maplibregl.Marker>()
   );
+  const stationsInRangeMarkersRef = useRef(
+    new globalThis.Map<string, maplibregl.Marker>()
+  );
   const allStationsRef = useRef<StationCoordinate[]>([]);
   const stationsAbortRef = useRef<AbortController | null>(null);
   const initialViewRef = useRef({ center, zoom });
@@ -419,6 +517,7 @@ export default function Map({
   const plan =
     plans !== null ? planForBatteryCapacity(plans, batteryCapacity) : null;
   const chargingStations = plan?.charging_stations ?? [];
+  const stationsInRange = plan?.stations_in_range ?? [];
   const pathsFromHome = plan?.paths_from_home ?? [];
   const pathsFromStations = plan?.paths_from_stations ?? [];
   pointsRef.current = points;
@@ -726,6 +825,7 @@ export default function Map({
         marker.remove();
       }
       chargingMarkersRef.current.clear();
+      clearStationsInRangeMarkers(stationsInRangeMarkersRef.current);
       if (map.getLayer(ALL_STATIONS_LAYER_ID)) {
         map.removeLayer(ALL_STATIONS_LAYER_ID);
       }
@@ -760,9 +860,16 @@ export default function Map({
     const apply = () => {
       if (sidebarView !== "analysis") {
         removeAllPathLayers(map);
+        clearStationsInRangeMarkers(stationsInRangeMarkersRef.current);
         return;
       }
       syncPathLayers(map, pathsFromHome, pathsFromStations, locationPoints);
+      syncStationsInRangeMarkers(
+        map,
+        stationsInRangeMarkersRef.current,
+        stationsInRange,
+        chargingStations
+      );
     };
 
     if (map.isStyleLoaded()) {
@@ -770,7 +877,14 @@ export default function Map({
     } else {
       map.once("load", apply);
     }
-  }, [pathsFromHome, pathsFromStations, points, sidebarView]);
+  }, [
+    pathsFromHome,
+    pathsFromStations,
+    stationsInRange,
+    chargingStations,
+    points,
+    sidebarView,
+  ]);
 
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
@@ -881,17 +995,30 @@ export default function Map({
 
     chargingStations.forEach((station, index) => {
       const id = chargingStationKey(station, index);
+      const lngLat: [number, number] = [station.long, station.lat];
       const existing = chargingMarkersRef.current.get(id);
       if (existing) {
-        existing.setLngLat([station.long, station.lat]);
+        existing.setLngLat(lngLat);
         return;
       }
 
+      const element = createChargingMarkerElement({
+        color: PRIMARY_COLOR,
+        foreground: "#ffffff",
+        title: `${station.charger_kilowatts}kW ${station.charger_type} · ${formatVisitDay(station.visit_day)} · ${station.distance_to_location.toFixed(1)} km`,
+      });
+      attachMarkerHoverPopup(
+        map,
+        element,
+        lngLat,
+        selectedChargingStationHoverHtml(station)
+      );
+
       const marker = new maplibregl.Marker({
-        element: createChargingMarkerElement(station),
+        element,
         anchor: "center",
       })
-        .setLngLat([station.long, station.lat])
+        .setLngLat(lngLat)
         .addTo(map);
 
       chargingMarkersRef.current.set(id, marker);

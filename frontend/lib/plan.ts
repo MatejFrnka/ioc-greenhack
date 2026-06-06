@@ -25,6 +25,14 @@ export const DEFAULT_BATTERY_KWH = 60;
 export type BatteryCapacityKwh =
   (typeof BATTERY_CAPACITY_OPTIONS)[number]["kwh"];
 
+export interface StationInRange {
+  lat: number;
+  long: number;
+  charger_type: "AC" | "DC" | "UNKNOWN";
+  charger_kilowatts: number;
+  distance_to_location: number;
+}
+
 export interface ChargingStation {
   lat: number;
   long: number;
@@ -56,6 +64,7 @@ export interface SocPoint {
 
 export interface PlanResponse {
   charging_stations: ChargingStation[];
+  stations_in_range: StationInRange[];
   weekly_distance: Record<DayOfWeek, number>;
   daily_peak_kwh: Record<DayOfWeek, number>;
   soc_trajectory: SocPoint[];
@@ -152,8 +161,6 @@ export function planForBatteryCapacity(
   return plans[String(kwh) as `${BatteryCapacityKwh}`] ?? null;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5003";
-
 export const CHARGING_STATION_DC_COLOR = "#16a34a";
 export const CHARGING_STATION_AC_COLOR = "#ca8a04";
 
@@ -164,7 +171,7 @@ export async function fetchPlan(
   request: PlanRequest,
   signal?: AbortSignal
 ): Promise<PlanResponseByCapacity> {
-  const response = await fetch(`${API_BASE}/api/plan`, {
+  const response = await fetch("/api/plan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -181,7 +188,7 @@ export async function fetchPlan(
 export async function fetchStations(
   signal?: AbortSignal
 ): Promise<StationCoordinate[]> {
-  const response = await fetch(`${API_BASE}/api/stations`, { signal });
+  const response = await fetch("/api/stations", { signal });
 
   if (!response.ok) {
     throw new Error(`Stations request failed (${response.status})`);
@@ -197,6 +204,31 @@ export function formatVisitDay(day: DayOfWeek | null): string {
 
 export function chargingStationKey(station: ChargingStation, index: number): string {
   return `${station.lat},${station.long},${station.charger_kilowatts},${index}`;
+}
+
+export function stationInRangeKey(station: StationInRange, index: number): string {
+  return `in-range:${station.lat},${station.long},${station.charger_kilowatts},${index}`;
+}
+
+export function dedupeStationsInRange(
+  stations: StationInRange[]
+): StationInRange[] {
+  const seen = new Map<string, StationInRange>();
+  for (const station of stations) {
+    const key = `${station.lat},${station.long},${station.charger_type},${station.charger_kilowatts}`;
+    const existing = seen.get(key);
+    if (
+      !existing ||
+      station.distance_to_location < existing.distance_to_location
+    ) {
+      seen.set(key, station);
+    }
+  }
+  return [...seen.values()];
+}
+
+export function formatStationInRangeDistance(km: number): string {
+  return km < 1 ? `${km.toFixed(2)} km` : `${km.toFixed(1)} km`;
 }
 
 export function totalWeeklyKm(

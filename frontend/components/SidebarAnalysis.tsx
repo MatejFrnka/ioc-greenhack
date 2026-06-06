@@ -135,7 +135,6 @@ export default function SidebarAnalysis({
           <ul className="mt-2 flex flex-col gap-2">
             {plan.charging_stations.map((station, index) => {
               const key = chargingStationKey(station, index);
-              const isDc = station.charger_type === "DC";
               return (
                 <li
                   key={key}
@@ -144,8 +143,7 @@ export default function SidebarAnalysis({
                   className="flex items-center gap-3 rounded-xl border border-zinc-100 bg-zinc-50/70 px-3 py-2.5 transition hover:border-primary/50 hover:bg-primary/5"
                 >
                   <span
-                    className="flex size-9 shrink-0 items-center justify-center rounded-full text-white shadow-sm"
-                    style={{ backgroundColor: isDc ? "#16a34a" : "#ca8a04" }}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-sm"
                   >
                     <span className="material-icons text-[18px] leading-none">
                       ev_station
