@@ -158,6 +158,11 @@ function removeStationPathsLayer(map: maplibregl.Map) {
   }
 }
 
+function removeAllPathLayers(map: maplibregl.Map) {
+  removePathsLayer(map);
+  removeStationPathsLayer(map);
+}
+
 function updatePathsFromStationsLayer(
   map: maplibregl.Map,
   paths: PathFromHome[]
@@ -174,6 +179,23 @@ function updatePathsFromStationsLayer(
 
   if (existing) {
     existing.setData(data);
+    if (!map.getLayer(STATION_PATHS_LAYER_ID)) {
+      map.addLayer({
+        id: STATION_PATHS_LAYER_ID,
+        type: "line",
+        source: STATION_PATHS_SOURCE_ID,
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": STATION_PATHS_COLOR,
+          "line-width": PATHS_LINE_WIDTH,
+          "line-opacity": 0.9,
+          "line-dasharray": [2, 2],
+        },
+      });
+    }
     return;
   }
 
@@ -212,6 +234,22 @@ function updatePathsFromHomeLayer(
 
   if (existing) {
     existing.setData(data);
+    if (!map.getLayer(PATHS_LAYER_ID)) {
+      map.addLayer({
+        id: PATHS_LAYER_ID,
+        type: "line",
+        source: PATHS_SOURCE_ID,
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": PATHS_LINE_WIDTH,
+          "line-opacity": 0.85,
+        },
+      });
+    }
     return;
   }
 
@@ -230,6 +268,16 @@ function updatePathsFromHomeLayer(
       "line-opacity": 0.85,
     },
   });
+}
+
+function syncPathLayers(
+  map: maplibregl.Map,
+  pathsFromHome: PathFromHome[],
+  pathsFromStations: PathFromHome[],
+  locationPoints: MapPoint[]
+) {
+  updatePathsFromHomeLayer(map, pathsFromHome, locationPoints);
+  updatePathsFromStationsLayer(map, pathsFromStations);
 }
 
 function updateAllStationsLayer(
@@ -684,8 +732,7 @@ export default function Map({
       if (map.getSource(ALL_STATIONS_SOURCE_ID)) {
         map.removeSource(ALL_STATIONS_SOURCE_ID);
       }
-      removePathsLayer(map);
-      removeStationPathsLayer(map);
+      removeAllPathLayers(map);
       map.remove();
       mapRef.current = null;
     };
@@ -711,11 +758,11 @@ export default function Map({
     const locationPoints = points.filter((point) => point.type !== "home");
 
     const apply = () => {
-      if (sidebarView !== "analysis" || pathsFromHome.length === 0) {
-        removePathsLayer(map);
+      if (sidebarView !== "analysis") {
+        removeAllPathLayers(map);
         return;
       }
-      updatePathsFromHomeLayer(map, pathsFromHome, locationPoints);
+      syncPathLayers(map, pathsFromHome, pathsFromStations, locationPoints);
     };
 
     if (map.isStyleLoaded()) {
@@ -723,26 +770,7 @@ export default function Map({
     } else {
       map.once("load", apply);
     }
-  }, [pathsFromHome, points, sidebarView]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const apply = () => {
-      if (sidebarView !== "analysis" || pathsFromStations.length === 0) {
-        removeStationPathsLayer(map);
-        return;
-      }
-      updatePathsFromStationsLayer(map, pathsFromStations);
-    };
-
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("load", apply);
-    }
-  }, [pathsFromStations, sidebarView]);
+  }, [pathsFromHome, pathsFromStations, points, sidebarView]);
 
   const analyzePlan = useCallback(() => {
     planAbortRef.current?.abort();
