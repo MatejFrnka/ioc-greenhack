@@ -1,4 +1,4 @@
-name: Build Node Modules
+name: Build Frontend Node Modules
 
 on:
   workflow_dispatch:
@@ -16,15 +16,17 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Install dependencies (frontend)
+        working-directory: frontend
         run: npm install
 
-      - name: Archive node_modules
-        run: tar -czf node_modules.tar.gz node_modules
+      - name: Zip node_modules
+        working-directory: frontend
+        run: zip -r node_modules.zip node_modules
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: node_modules
-          path: node_modules.tar.gz
+          name: frontend-node_modules
+          path: frontend/node_modules.zip
           retention-days: 7
