@@ -40,6 +40,10 @@ def solution(home, locations, battery_kwh):
     for s in stations_result:
         del s['location_from']
 
+    stations_in_range = backend.best_charging_stations(home)
+    for loc in locations:
+        stations_in_range += backend.best_charging_stations(loc)
+
     return {
         "charging_stations": stations_result,
         "weekly_distance": {day.name: km for day, km in distances.items()},
@@ -52,7 +56,8 @@ def solution(home, locations, battery_kwh):
         "feasible": result is not None,
         "reason": reason,
         "paths_from_home": [backend.drive_path(home, loc) for loc in locations],
-        "paths_from_stations": [backend.walking_path(s['location_from'], (s['lat'], s['long'])) for s in stations]
+        "paths_from_stations": [backend.walking_path(s['location_from'], (s['lat'], s['long'])) for s in stations],
+        "stations_in_range": stations_in_range,
     }
 
 
