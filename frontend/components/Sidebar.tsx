@@ -42,9 +42,9 @@ export default function Sidebar({
 
   return (
     <aside className="flex h-full w-96 shrink-0 flex-col bg-white">
-      <div className="shrink-0 px-8 py-6">
-        <h1 className="text-4xl font-bold tracking-tight text-zinc-900">
-          <span className="text-primary">EV</span>ify
+      <div className="shrink-0 px-8 pt-6">
+        <h1>
+          <img src="/logo.png" alt="Evify" className="h-20 w-auto" />
         </h1>
       </div>
 
